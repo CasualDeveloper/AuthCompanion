@@ -49,7 +49,7 @@ final class PAMInspectionTests: XCTestCase {
     XCTAssertEqual(
       PAMInspector.inspect(
         PAMSnapshot(
-          sudoLocal: Data("auth sufficient pam_companion.so timeout=5\n".utf8),
+          sudoLocal: Data("auth required pam_companion.so\n".utf8),
           canonicalModuleExists: true,
           legacyModuleExists: false,
           versionedLegacyModuleExists: false
@@ -90,5 +90,37 @@ final class PAMInspectionTests: XCTestCase {
     )
 
     XCTAssertEqual(PAMInspector.inspect(snapshot), .conflict)
+  }
+
+  func testAcceptsPamCompanionSupportedReasonAndTimeoutArguments() {
+    let snapshot = PAMSnapshot(
+      sudoLocal: Data(
+        "auth sufficient pam_companion.so reason=Approve timeout=120\nauth sufficient pam_tid.so\n"
+          .utf8
+      ),
+      canonicalModuleExists: true,
+      legacyModuleExists: false,
+      versionedLegacyModuleExists: false
+    )
+
+    XCTAssertEqual(PAMInspector.inspect(snapshot), .configured)
+  }
+
+  func testRejectsInvalidArgumentsDuplicateTouchIDAndUnrelatedActiveModules() {
+    for policy in [
+      "auth sufficient pam_companion.so timeout=0\n",
+      "auth sufficient pam_companion.so reason=a reason=b\n",
+      "auth sufficient pam_companion.so\nauth sufficient pam_tid.so\nauth sufficient pam_tid.so\n",
+      "auth sufficient pam_companion.so\nauth required pam_opendirectory.so\n",
+    ] {
+      let snapshot = PAMSnapshot(
+        sudoLocal: Data(policy.utf8),
+        canonicalModuleExists: true,
+        legacyModuleExists: false,
+        versionedLegacyModuleExists: false
+      )
+
+      XCTAssertEqual(PAMInspector.inspect(snapshot), .conflict, policy)
+    }
   }
 }

@@ -207,7 +207,7 @@ public final class AuthCompanionManager {
     guard pamSetup.exitStatus == 0 else {
       return rollbackSetup(
         after: pinentryMutation,
-        pamWasApplied: false,
+        pamWasApplied: true,
         primaryDiagnostic: toolFailure("pam.setup.failed", result: pamSetup),
         originalPAM: originalPAM
       )
@@ -264,31 +264,44 @@ public final class AuthCompanionManager {
   public func restore() -> AuthCommandResult<MutationState> {
     var diagnostics: [SuiteDiagnostic] = []
     let originalPAM = visiblePAMStatus(diagnostics: &diagnostics)
+    let dryRun: ToolResult
     do {
-      let dryRun = try runner.run(sudoInvocation([paths.pamExecutable, "restore", "--dry-run"]))
-      guard dryRun.exitStatus == 0 else {
-        return mutationFailure(
-          operation: "restore",
-          diagnostic: toolFailure("pam.restore.preflightFailed", result: dryRun),
-          pinentry: unavailable(component: "pinentry-companion"),
-          pam: originalPAM,
-          recovery: .notNeeded
-        )
-      }
-      let pamRestore = try runner.run(sudoInvocation([paths.pamExecutable, "restore"]))
-      guard pamRestore.exitStatus == 0 else {
-        return mutationFailure(
-          operation: "restore",
-          diagnostic: toolFailure("pam.restore.failed", result: pamRestore),
-          pinentry: unavailable(component: "pinentry-companion"),
-          pam: originalPAM,
-          recovery: .notNeeded
-        )
-      }
+      dryRun = try runner.run(sudoInvocation([paths.pamExecutable, "restore", "--dry-run"]))
     } catch {
       return mutationFailure(
         operation: "restore",
         diagnostic: componentFailure("pam-companion", error: error),
+        pinentry: unavailable(component: "pinentry-companion"),
+        pam: originalPAM,
+        recovery: .notNeeded
+      )
+    }
+    guard dryRun.exitStatus == 0 else {
+      return mutationFailure(
+        operation: "restore",
+        diagnostic: toolFailure("pam.restore.preflightFailed", result: dryRun),
+        pinentry: unavailable(component: "pinentry-companion"),
+        pam: originalPAM,
+        recovery: .notNeeded
+      )
+    }
+
+    let pamRestore: ToolResult
+    do {
+      pamRestore = try runner.run(sudoInvocation([paths.pamExecutable, "restore"]))
+    } catch {
+      return mutationFailure(
+        operation: "restore",
+        diagnostic: componentFailure("pam-companion", error: error),
+        pinentry: unavailable(component: "pinentry-companion"),
+        pam: originalPAM,
+        recovery: .manualRequired
+      )
+    }
+    guard pamRestore.exitStatus == 0 else {
+      return mutationFailure(
+        operation: "restore",
+        diagnostic: toolFailure("pam.restore.failed", result: pamRestore),
         pinentry: unavailable(component: "pinentry-companion"),
         pam: originalPAM,
         recovery: .manualRequired

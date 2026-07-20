@@ -137,7 +137,7 @@ final class SuiteManagerTests: XCTestCase {
     XCTAssertEqual(runner.invocations.count, 2)
   }
 
-  func testSetupRollsPinentryBackWhenPAMApplyFails() {
+  func testSetupRestoresPAMAndPinentryWhenPAMApplyFails() {
     let runner = RecordingToolRunner(results: [
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
       .success(),
@@ -149,6 +149,7 @@ final class SuiteManagerTests: XCTestCase {
           safety: "exactRestoreStateRecorded"
         )),
       ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("PAM setup failed\n".utf8)),
+      .success(),
       .success(
         stdout: pinentryMutationJSON(
           operation: "restore",
@@ -166,11 +167,14 @@ final class SuiteManagerTests: XCTestCase {
     XCTAssertEqual(result.envelope.outcome, .error)
     XCTAssertEqual(result.envelope.state.recovery, .rolledBack)
     XCTAssertEqual(
-      runner.invocations.last,
-      ToolInvocation(
-        executable: paths.pinentryExecutable,
-        arguments: ["restore", "--yes", "--format", "json"]
-      )
+      Array(runner.invocations.suffix(2)),
+      [
+        sudo([paths.pamExecutable, "restore"]),
+        ToolInvocation(
+          executable: paths.pinentryExecutable,
+          arguments: ["restore", "--yes", "--format", "json"]
+        ),
+      ]
     )
   }
 
@@ -186,6 +190,7 @@ final class SuiteManagerTests: XCTestCase {
           safety: "exactRestoreStateRecorded"
         )),
       ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("PAM setup failed\n".utf8)),
+      .success(),
       ToolResult(
         exitStatus: 1,
         stdout: pinentryMutationJSON(
@@ -342,6 +347,7 @@ final class SuiteManagerTests: XCTestCase {
     let result = manager.restore()
 
     XCTAssertEqual(result.exitStatus, 1)
+    XCTAssertEqual(result.envelope.state.recovery, .manualRequired)
     XCTAssertEqual(
       runner.invocations,
       [
