@@ -95,41 +95,74 @@ final class ApplicationTests: XCTestCase {
     XCTAssertTrue(output.stderr.contains("pam-companion"))
   }
 
-  func testSetupWithoutSudoAuthorizationFailsBeforeMutation() {
-    let paths = ComponentPaths(
-      pinentryExecutable: "/fixed/pinentry-companion",
-      pamExecutable: "/fixed/pam-companion",
-      sudoExecutable: "/usr/bin/sudo"
-    )
-    let runner = ApplicationRunner(results: [
-      ToolResult(
-        exitStatus: 0,
-        stdout: Data("pinentry-companion 0.2.0\n".utf8),
-        stderr: Data()
-      ),
-      ToolResult(
-        exitStatus: 0,
-        stdout: Data("pam-companion 0.1.0\n".utf8),
-        stderr: Data()
-      ),
-      ToolResult(exitStatus: 1, stdout: Data(), stderr: Data()),
-    ])
+  func testPrivilegedCommandsRequireSudoAuthorizationBeforeManagerWork() {
+    for arguments in [
+      ["authcompanion", "setup", "--yes"],
+      ["authcompanion", "restore", "--yes"],
+      ["authcompanion", "doctor"],
+    ] {
+      let paths = fixedPaths()
+      let runner = ApplicationRunner(
+        results: versionResults() + [
+          ToolResult(exitStatus: 1, stdout: Data(), stderr: Data())
+        ])
+      let application = makeApplication(
+        effectiveUserID: 501,
+        locator: ApplicationLocator(paths: paths),
+        runner: runner
+      )
+
+      let output = application.run(arguments)
+
+      XCTAssertEqual(output.exitStatus, 1, "arguments: \(arguments)")
+      XCTAssertTrue(output.stderr.contains("sudo -v"), "arguments: \(arguments)")
+      XCTAssertEqual(
+        runner.invocations.last,
+        ToolInvocation(
+          executable: paths.sudoExecutable,
+          arguments: ["-n", "--", "/usr/bin/true"]
+        ))
+      XCTAssertEqual(runner.invocations.count, 3)
+    }
+  }
+
+  func testJSONAuthorizationFailureUsesStableDiagnostic() throws {
+    let runner = ApplicationRunner(
+      results: versionResults() + [
+        ToolResult(exitStatus: 1, stdout: Data(), stderr: Data())
+      ])
     let application = makeApplication(
       effectiveUserID: 501,
-      locator: ApplicationLocator(paths: paths),
+      locator: ApplicationLocator(paths: fixedPaths()),
       runner: runner
     )
 
-    let output = application.run(["authcompanion", "setup", "--yes"])
+    let output = application.run([
+      "authcompanion", "restore", "--yes", "--format", "json",
+    ])
+    let envelope = try JSONDecoder().decode(
+      AuthEnvelope<FailureState>.self, from: Data(output.stdout.utf8))
+
+    XCTAssertEqual(output.exitStatus, 1)
+    XCTAssertEqual(envelope.diagnostics.first?.code, "sudo.authorizationRequired")
+    XCTAssertEqual(runner.invocations.count, 3)
+  }
+
+  func testAuthorizationProbeErrorUsesSameRemediation() {
+    let runner = ApplicationRunner(
+      results: versionResults(),
+      errorAfterResults: DependencyError.notInstalled
+    )
+    let application = makeApplication(
+      effectiveUserID: 501,
+      locator: ApplicationLocator(paths: fixedPaths()),
+      runner: runner
+    )
+
+    let output = application.run(["authcompanion", "doctor"])
 
     XCTAssertEqual(output.exitStatus, 1)
     XCTAssertTrue(output.stderr.contains("sudo -v"))
-    XCTAssertEqual(
-      runner.invocations.last,
-      ToolInvocation(
-        executable: paths.sudoExecutable,
-        arguments: ["-n", "--", "/usr/bin/true"]
-      ))
     XCTAssertEqual(runner.invocations.count, 3)
   }
 
@@ -160,6 +193,29 @@ final class ApplicationTests: XCTestCase {
       pamSnapshots: ApplicationPAMSnapshotReader()
     )
   }
+
+  private func fixedPaths() -> ComponentPaths {
+    ComponentPaths(
+      pinentryExecutable: "/fixed/pinentry-companion",
+      pamExecutable: "/fixed/pam-companion",
+      sudoExecutable: "/usr/bin/sudo"
+    )
+  }
+
+  private func versionResults() -> [ToolResult] {
+    [
+      ToolResult(
+        exitStatus: 0,
+        stdout: Data("pinentry-companion 0.2.0\n".utf8),
+        stderr: Data()
+      ),
+      ToolResult(
+        exitStatus: 0,
+        stdout: Data("pam-companion 0.1.0\n".utf8),
+        stderr: Data()
+      ),
+    ]
+  }
 }
 
 private final class ApplicationLocator: ComponentLocating {
@@ -182,15 +238,19 @@ private final class ApplicationLocator: ComponentLocating {
 
 private final class ApplicationRunner: ToolRunning {
   private var results: [ToolResult]
+  private let errorAfterResults: (any Error)?
   private(set) var invocations: [ToolInvocation] = []
 
-  init(results: [ToolResult]) {
+  init(results: [ToolResult], errorAfterResults: (any Error)? = nil) {
     self.results = results
+    self.errorAfterResults = errorAfterResults
   }
 
   func run(_ invocation: ToolInvocation) throws -> ToolResult {
     invocations.append(invocation)
-    guard !results.isEmpty else { throw DependencyError.notInstalled }
+    guard !results.isEmpty else {
+      throw errorAfterResults ?? DependencyError.notInstalled
+    }
     return results.removeFirst()
   }
 }
