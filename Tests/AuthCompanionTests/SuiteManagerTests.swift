@@ -18,6 +18,10 @@ final class SuiteManagerTests: XCTestCase {
     XCTAssertEqual(status.envelope.state.pam.condition, .configured)
     XCTAssertEqual(plan.envelope.outcome, .ok)
     XCTAssertEqual(
+      plan.envelope.state.sequence.map(\.component),
+      ["pam-companion", "pinentry-companion", "pam-companion"]
+    )
+    XCTAssertEqual(
       runner.invocations,
       [
         ToolInvocation(
@@ -34,20 +38,38 @@ final class SuiteManagerTests: XCTestCase {
     XCTAssertEqual(snapshots.readCount, 2)
   }
 
+  func testStatusTreatsAnotherPinentryBinaryAsAConflict() {
+    let foreignStatus = String(decoding: pinentryStatusJSON(), as: UTF8.self)
+      .replacingOccurrences(of: "currentBinary", with: "otherBinary")
+      .replacingOccurrences(of: "\"outcome\":\"ok\"", with: "\"outcome\":\"warning\"")
+    let runner = RecordingToolRunner(results: [
+      ToolResult(exitStatus: 0, stdout: Data(foreignStatus.utf8), stderr: Data())
+    ])
+    let manager = makeManager(
+      runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .configured))
+
+    let result = manager.status()
+
+    XCTAssertEqual(result.envelope.state.pinentry.condition, .conflict)
+    XCTAssertEqual(result.envelope.outcome, .warning)
+  }
+
   func testSetupPreflightsThenMutatesPinentryBeforePAMAndVerifiesHealth() {
     let runner = RecordingToolRunner(results: [
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
       .success(stdout: Data("would install pam_companion.so and update sudo_local\n".utf8)),
-      .success(stdout: pinentryMutationJSON(
-        operation: "setup",
-        changed: true,
-        transactionState: "committed",
-        safety: "exactRestoreStateRecorded"
-      )),
+      .success(
+        stdout: pinentryMutationJSON(
+          operation: "setup",
+          changed: true,
+          transactionState: "committed",
+          safety: "exactRestoreStateRecorded"
+        )),
       .success(stdout: Data("installed pam_companion.so and updated sudo_local\n".utf8)),
       .success(stdout: Data("ok: pam_companion.so is installed and sudo_local is managed\n".utf8)),
     ])
-    let manager = makeManager(runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .configured))
+    let manager = makeManager(
+      runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .configured))
 
     let result = manager.setup(takeOver: false)
 
@@ -58,7 +80,8 @@ final class SuiteManagerTests: XCTestCase {
     XCTAssertEqual(
       runner.invocations,
       [
-        ToolInvocation(executable: paths.pinentryExecutable, arguments: ["plan", "--format", "json"]),
+        ToolInvocation(
+          executable: paths.pinentryExecutable, arguments: ["plan", "--format", "json"]),
         sudo([paths.pamExecutable, "setup", "--dry-run"]),
         ToolInvocation(
           executable: paths.pinentryExecutable,
@@ -74,16 +97,18 @@ final class SuiteManagerTests: XCTestCase {
     let runner = RecordingToolRunner(results: [
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
       .success(),
-      .success(stdout: pinentryMutationJSON(
-        operation: "setup",
-        changed: true,
-        transactionState: "committed",
-        safety: "exactRestoreStateRecorded"
-      )),
+      .success(
+        stdout: pinentryMutationJSON(
+          operation: "setup",
+          changed: true,
+          transactionState: "committed",
+          safety: "exactRestoreStateRecorded"
+        )),
       .success(),
       .success(),
     ])
-    let manager = makeManager(runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .configured))
+    let manager = makeManager(
+      runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .configured))
 
     _ = manager.setup(takeOver: true)
 
@@ -101,7 +126,8 @@ final class SuiteManagerTests: XCTestCase {
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
       ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("unsupported PAM policy\n".utf8)),
     ])
-    let manager = makeManager(runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .notConfigured))
+    let manager = makeManager(
+      runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .notConfigured))
 
     let result = manager.setup(takeOver: false)
 
@@ -115,21 +141,24 @@ final class SuiteManagerTests: XCTestCase {
     let runner = RecordingToolRunner(results: [
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
       .success(),
-      .success(stdout: pinentryMutationJSON(
-        operation: "setup",
-        changed: true,
-        transactionState: "committed",
-        safety: "exactRestoreStateRecorded"
-      )),
+      .success(
+        stdout: pinentryMutationJSON(
+          operation: "setup",
+          changed: true,
+          transactionState: "committed",
+          safety: "exactRestoreStateRecorded"
+        )),
       ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("PAM setup failed\n".utf8)),
-      .success(stdout: pinentryMutationJSON(
-        operation: "restore",
-        changed: true,
-        transactionState: "restored",
-        safety: "compareAndSwapVerified"
-      )),
+      .success(
+        stdout: pinentryMutationJSON(
+          operation: "restore",
+          changed: true,
+          transactionState: "restored",
+          safety: "compareAndSwapVerified"
+        )),
     ])
-    let manager = makeManager(runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .notConfigured))
+    let manager = makeManager(
+      runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .notConfigured))
 
     let result = manager.setup(takeOver: false)
 
@@ -149,12 +178,13 @@ final class SuiteManagerTests: XCTestCase {
     let runner = RecordingToolRunner(results: [
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
       .success(),
-      .success(stdout: pinentryMutationJSON(
-        operation: "setup",
-        changed: true,
-        transactionState: "committed",
-        safety: "exactRestoreStateRecorded"
-      )),
+      .success(
+        stdout: pinentryMutationJSON(
+          operation: "setup",
+          changed: true,
+          transactionState: "committed",
+          safety: "exactRestoreStateRecorded"
+        )),
       ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("PAM setup failed\n".utf8)),
       ToolResult(
         exitStatus: 1,
@@ -168,7 +198,8 @@ final class SuiteManagerTests: XCTestCase {
         stderr: Data()
       ),
     ])
-    let manager = makeManager(runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .notConfigured))
+    let manager = makeManager(
+      runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .notConfigured))
 
     let result = manager.setup(takeOver: false)
 
@@ -180,21 +211,23 @@ final class SuiteManagerTests: XCTestCase {
     let runner = RecordingToolRunner(results: [
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
       .success(),
-      .success(stdout: pinentryMutationJSON(
-        operation: "setup",
-        changed: true,
-        transactionState: "committed",
-        safety: "exactRestoreStateRecorded"
-      )),
+      .success(
+        stdout: pinentryMutationJSON(
+          operation: "setup",
+          changed: true,
+          transactionState: "committed",
+          safety: "exactRestoreStateRecorded"
+        )),
       .success(),
       ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("PAM doctor failed\n".utf8)),
       .success(),
-      .success(stdout: pinentryMutationJSON(
-        operation: "restore",
-        changed: true,
-        transactionState: "restored",
-        safety: "compareAndSwapVerified"
-      )),
+      .success(
+        stdout: pinentryMutationJSON(
+          operation: "restore",
+          changed: true,
+          transactionState: "restored",
+          safety: "compareAndSwapVerified"
+        )),
     ])
     let manager = makeManager(
       runner: runner,
@@ -204,34 +237,38 @@ final class SuiteManagerTests: XCTestCase {
     let result = manager.setup(takeOver: false)
 
     XCTAssertEqual(result.envelope.state.recovery, .rolledBack)
-    XCTAssertEqual(Array(runner.invocations.suffix(2)), [
-      sudo([paths.pamExecutable, "restore"]),
-      ToolInvocation(
-        executable: paths.pinentryExecutable,
-        arguments: ["restore", "--yes", "--format", "json"]
-      ),
-    ])
+    XCTAssertEqual(
+      Array(runner.invocations.suffix(2)),
+      [
+        sudo([paths.pamExecutable, "restore"]),
+        ToolInvocation(
+          executable: paths.pinentryExecutable,
+          arguments: ["restore", "--yes", "--format", "json"]
+        ),
+      ])
   }
 
   func testSetupReportsManualRecoveryWhenPAMRollbackFailsButStillRestoresPinentry() {
     let runner = RecordingToolRunner(results: [
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
       .success(),
-      .success(stdout: pinentryMutationJSON(
-        operation: "setup",
-        changed: true,
-        transactionState: "committed",
-        safety: "exactRestoreStateRecorded"
-      )),
+      .success(
+        stdout: pinentryMutationJSON(
+          operation: "setup",
+          changed: true,
+          transactionState: "committed",
+          safety: "exactRestoreStateRecorded"
+        )),
       .success(),
       ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("PAM doctor failed\n".utf8)),
       ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("PAM restore failed\n".utf8)),
-      .success(stdout: pinentryMutationJSON(
-        operation: "restore",
-        changed: true,
-        transactionState: "restored",
-        safety: "compareAndSwapVerified"
-      )),
+      .success(
+        stdout: pinentryMutationJSON(
+          operation: "restore",
+          changed: true,
+          transactionState: "restored",
+          safety: "compareAndSwapVerified"
+        )),
     ])
     let manager = makeManager(
       runner: runner,
@@ -241,34 +278,38 @@ final class SuiteManagerTests: XCTestCase {
     let result = manager.setup(takeOver: false)
 
     XCTAssertEqual(result.envelope.state.recovery, .manualRequired)
-    XCTAssertEqual(Array(runner.invocations.suffix(2)), [
-      sudo([paths.pamExecutable, "restore"]),
-      ToolInvocation(
-        executable: paths.pinentryExecutable,
-        arguments: ["restore", "--yes", "--format", "json"]
-      ),
-    ])
+    XCTAssertEqual(
+      Array(runner.invocations.suffix(2)),
+      [
+        sudo([paths.pamExecutable, "restore"]),
+        ToolInvocation(
+          executable: paths.pinentryExecutable,
+          arguments: ["restore", "--yes", "--format", "json"]
+        ),
+      ])
   }
 
   func testSetupRollsBackBothComponentsWhenVisiblePAMPostconditionFails() {
     let runner = RecordingToolRunner(results: [
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
       .success(),
-      .success(stdout: pinentryMutationJSON(
-        operation: "setup",
-        changed: true,
-        transactionState: "committed",
-        safety: "exactRestoreStateRecorded"
-      )),
+      .success(
+        stdout: pinentryMutationJSON(
+          operation: "setup",
+          changed: true,
+          transactionState: "committed",
+          safety: "exactRestoreStateRecorded"
+        )),
       .success(),
       .success(),
       .success(),
-      .success(stdout: pinentryMutationJSON(
-        operation: "restore",
-        changed: true,
-        transactionState: "restored",
-        safety: "compareAndSwapVerified"
-      )),
+      .success(
+        stdout: pinentryMutationJSON(
+          operation: "restore",
+          changed: true,
+          transactionState: "restored",
+          safety: "compareAndSwapVerified"
+        )),
     ])
     let manager = makeManager(
       runner: runner,
@@ -279,13 +320,15 @@ final class SuiteManagerTests: XCTestCase {
 
     XCTAssertEqual(result.envelope.state.recovery, .rolledBack)
     XCTAssertEqual(result.envelope.diagnostics.first?.code, "pam.setup.postconditionFailed")
-    XCTAssertEqual(Array(runner.invocations.suffix(2)), [
-      sudo([paths.pamExecutable, "restore"]),
-      ToolInvocation(
-        executable: paths.pinentryExecutable,
-        arguments: ["restore", "--yes", "--format", "json"]
-      ),
-    ])
+    XCTAssertEqual(
+      Array(runner.invocations.suffix(2)),
+      [
+        sudo([paths.pamExecutable, "restore"]),
+        ToolInvocation(
+          executable: paths.pinentryExecutable,
+          arguments: ["restore", "--yes", "--format", "json"]
+        ),
+      ])
   }
 
   func testRestoreStopsBeforePinentryWhenPAMRestoreFails() {
@@ -293,42 +336,49 @@ final class SuiteManagerTests: XCTestCase {
       .success(),
       ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("PAM restore failed\n".utf8)),
     ])
-    let manager = makeManager(runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .configured))
+    let manager = makeManager(
+      runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .configured))
 
     let result = manager.restore()
 
     XCTAssertEqual(result.exitStatus, 1)
-    XCTAssertEqual(runner.invocations, [
-      sudo([paths.pamExecutable, "restore", "--dry-run"]),
-      sudo([paths.pamExecutable, "restore"]),
-    ])
+    XCTAssertEqual(
+      runner.invocations,
+      [
+        sudo([paths.pamExecutable, "restore", "--dry-run"]),
+        sudo([paths.pamExecutable, "restore"]),
+      ])
   }
 
   func testRestoreUsesPAMFirstThenPinentryMachineRestore() {
     let runner = RecordingToolRunner(results: [
       .success(),
       .success(),
-      .success(stdout: pinentryMutationJSON(
-        operation: "restore",
-        changed: true,
-        transactionState: "restored",
-        safety: "compareAndSwapVerified"
-      )),
+      .success(
+        stdout: pinentryMutationJSON(
+          operation: "restore",
+          changed: true,
+          transactionState: "restored",
+          safety: "compareAndSwapVerified"
+        )),
     ])
-    let manager = makeManager(runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .notConfigured))
+    let manager = makeManager(
+      runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .notConfigured))
 
     let result = manager.restore()
 
     XCTAssertEqual(result.exitStatus, 0)
     XCTAssertEqual(result.envelope.outcome, .ok)
-    XCTAssertEqual(runner.invocations, [
-      sudo([paths.pamExecutable, "restore", "--dry-run"]),
-      sudo([paths.pamExecutable, "restore"]),
-      ToolInvocation(
-        executable: paths.pinentryExecutable,
-        arguments: ["restore", "--yes", "--format", "json"]
-      ),
-    ])
+    XCTAssertEqual(
+      runner.invocations,
+      [
+        sudo([paths.pamExecutable, "restore", "--dry-run"]),
+        sudo([paths.pamExecutable, "restore"]),
+        ToolInvocation(
+          executable: paths.pinentryExecutable,
+          arguments: ["restore", "--yes", "--format", "json"]
+        ),
+      ])
   }
 
   private let paths = ComponentPaths(
@@ -390,14 +440,14 @@ private enum TestError: Error {
   case missingResult
 }
 
-private extension ToolResult {
-  static func success(stdout: Data = Data()) -> ToolResult {
+extension ToolResult {
+  fileprivate static func success(stdout: Data = Data()) -> ToolResult {
     ToolResult(exitStatus: 0, stdout: stdout, stderr: Data())
   }
 }
 
-private extension PAMCondition {
-  var snapshot: PAMSnapshot {
+extension PAMCondition {
+  fileprivate var snapshot: PAMSnapshot {
     switch self {
     case .configured:
       PAMSnapshot(
@@ -434,16 +484,18 @@ private extension PAMCondition {
 }
 
 let pinentryStatusJSONText = """
-    {"schemaVersion":1,"component":"pinentry-companion","componentVersion":"0.2.0","operation":"status","outcome":"ok","changed":false,"diagnostics":[],"state":{"gpgConfiguration":{"alignment":"currentBinary","ownership":"managed","recoveryAvailable":true}}}
-    """
+  {"schemaVersion":1,"component":"pinentry-companion","componentVersion":"0.2.0","operation":"status","outcome":"ok","changed":false,"diagnostics":[],"state":{"gpgConfiguration":{"alignment":"currentBinary","ownership":"managed","recoveryAvailable":true}}}
+  """
 
 func pinentryStatusJSON() -> Data {
   Data(pinentryStatusJSONText.utf8)
 }
 
-private func pinentryPlanJSON(changeRequired: Bool) -> Data {
-  Data("""
-    {"schemaVersion":1,"component":"pinentry-companion","componentVersion":"0.2.0","operation":"plan","outcome":"ok","changed":false,"diagnostics":[],"state":{"applicability":"ready","changeRequired":\(changeRequired),"conflicts":[]}}
+func pinentryPlanJSON(changeRequired: Bool) -> Data {
+  let outcome = changeRequired ? "warning" : "ok"
+  return Data(
+    """
+    {"schemaVersion":1,"component":"pinentry-companion","componentVersion":"0.2.0","operation":"plan","outcome":"\(outcome)","changed":false,"diagnostics":[],"state":{"applicability":"ready","changeRequired":\(changeRequired),"conflicts":[]}}
     """.utf8)
 }
 
@@ -454,7 +506,8 @@ func pinentryMutationJSON(
   transactionState: String,
   safety: String
 ) -> Data {
-  Data("""
+  Data(
+    """
     {"schemaVersion":1,"component":"pinentry-companion","componentVersion":"0.2.0","operation":"\(operation)","outcome":"\(outcome)","changed":\(changed),"diagnostics":[],"state":{"transactionState":"\(transactionState)","safety":"\(safety)"}}
     """.utf8)
 }

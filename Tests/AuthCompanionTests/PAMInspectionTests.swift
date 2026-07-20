@@ -27,37 +27,41 @@ final class PAMInspectionTests: XCTestCase {
       .notConfigured
     )
     XCTAssertEqual(
-      PAMInspector.inspect(PAMSnapshot(
-        sudoLocal: Data("auth sufficient pam_watchid.so.2\n".utf8),
-        canonicalModuleExists: false,
-        legacyModuleExists: false,
-        versionedLegacyModuleExists: true
-      )),
+      PAMInspector.inspect(
+        PAMSnapshot(
+          sudoLocal: Data("auth sufficient pam_watchid.so.2\n".utf8),
+          canonicalModuleExists: false,
+          legacyModuleExists: false,
+          versionedLegacyModuleExists: true
+        )),
       .legacy
     )
     XCTAssertEqual(
-      PAMInspector.inspect(PAMSnapshot(
-        sudoLocal: Data(),
-        canonicalModuleExists: true,
-        legacyModuleExists: false,
-        versionedLegacyModuleExists: false
-      )),
+      PAMInspector.inspect(
+        PAMSnapshot(
+          sudoLocal: Data(),
+          canonicalModuleExists: true,
+          legacyModuleExists: false,
+          versionedLegacyModuleExists: false
+        )),
       .unmanaged
     )
     XCTAssertEqual(
-      PAMInspector.inspect(PAMSnapshot(
-        sudoLocal: Data("auth sufficient pam_companion.so timeout=5\n".utf8),
-        canonicalModuleExists: true,
-        legacyModuleExists: false,
-        versionedLegacyModuleExists: false
-      )),
+      PAMInspector.inspect(
+        PAMSnapshot(
+          sudoLocal: Data("auth sufficient pam_companion.so timeout=5\n".utf8),
+          canonicalModuleExists: true,
+          legacyModuleExists: false,
+          versionedLegacyModuleExists: false
+        )),
       .conflict
     )
   }
 
   func testCommentsAndSimilarNamesDoNotCountAsActiveModules() {
     let snapshot = PAMSnapshot(
-      sudoLocal: Data("# auth sufficient pam_watchid.so.2\nauth sufficient pam_companion.so.backup\n".utf8),
+      sudoLocal: Data(
+        "# auth sufficient pam_watchid.so.2\nauth sufficient pam_companion.so.backup\n".utf8),
       canonicalModuleExists: false,
       legacyModuleExists: false,
       versionedLegacyModuleExists: false
@@ -71,6 +75,18 @@ final class PAMInspectionTests: XCTestCase {
       canonicalModuleExists: true,
       legacyModuleExists: false,
       versionedLegacyModuleExists: false
+    )
+
+    XCTAssertEqual(PAMInspector.inspect(snapshot), .conflict)
+  }
+
+  func testUnsafeFilesystemObjectFailsClosed() {
+    let snapshot = PAMSnapshot(
+      sudoLocal: Data("auth sufficient pam_companion.so\n".utf8),
+      canonicalModuleExists: true,
+      legacyModuleExists: false,
+      versionedLegacyModuleExists: false,
+      unsafeObjectExists: true
     )
 
     XCTAssertEqual(PAMInspector.inspect(snapshot), .conflict)

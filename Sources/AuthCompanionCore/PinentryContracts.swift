@@ -20,10 +20,18 @@ struct PinentryStatusContract: Decodable {
   }
 
   struct GPGConfiguration: Decodable {
-    let alignment: String
+    let alignment: PinentryConfigurationAlignment
     let ownership: String
     let recoveryAvailable: Bool
   }
+}
+
+enum PinentryConfigurationAlignment: String, Decodable {
+  case currentBinary
+  case otherBinary
+  case missing
+  case ambiguous
+  case unknown
 }
 
 struct PinentryPlanContract: Decodable {
@@ -37,7 +45,7 @@ struct PinentryPlanContract: Decodable {
   let state: State
 
   struct State: Decodable {
-    let applicability: String
+    let applicability: PinentryPlanApplicability
     let changeRequired: Bool
     let conflicts: [Conflict]
   }
@@ -46,6 +54,11 @@ struct PinentryPlanContract: Decodable {
     let code: String
     let message: String
   }
+}
+
+enum PinentryPlanApplicability: String, Decodable {
+  case ready
+  case blocked
 }
 
 struct PinentryMutationContract: Decodable {
@@ -65,7 +78,7 @@ struct PinentryMutationContract: Decodable {
 }
 
 enum PinentryContractDecoder {
-  static let supportedVersion = "0.2.0"
+  static let supportedVersion = SupportedComponentVersions.pinentryCompanion
 
   static func status(_ result: ToolResult) throws -> PinentryStatusContract {
     let envelope = try JSONDecoder().decode(PinentryStatusContract.self, from: result.stdout)
@@ -77,6 +90,7 @@ enum PinentryContractDecoder {
       expectedOperation: "status"
     )
     try validateExit(outcome: envelope.outcome, exitStatus: result.exitStatus)
+    guard !envelope.changed else { throw PinentryContractError.invalidEnvelope }
     return envelope
   }
 
@@ -90,6 +104,7 @@ enum PinentryContractDecoder {
       expectedOperation: "plan"
     )
     try validateExit(outcome: envelope.outcome, exitStatus: result.exitStatus)
+    guard validPlanState(envelope) else { throw PinentryContractError.invalidEnvelope }
     return envelope
   }
 
@@ -134,13 +149,15 @@ enum PinentryContractDecoder {
   }
 
   private static func validMutationState(_ envelope: PinentryMutationContract) -> Bool {
-    switch (
-      envelope.operation,
-      envelope.outcome,
-      envelope.changed,
-      envelope.state.transactionState,
-      envelope.state.safety
-    ) {
+    return
+      switch (
+        envelope.operation,
+        envelope.outcome,
+        envelope.changed,
+        envelope.state.transactionState,
+        envelope.state.safety
+      )
+    {
     case ("setup", .ok, true, "committed", "exactRestoreStateRecorded"),
       ("setup", .ok, false, "unchanged", "exactRestoreStateRecorded"),
       ("restore", .ok, true, "restored", "compareAndSwapVerified"),
@@ -149,6 +166,25 @@ enum PinentryContractDecoder {
       (_, .conflict, false, "notCommitted", "noMutationCommitted"),
       (_, .error, false, "rollbackFailed", "manualRecoveryRequired"),
       (_, .error, false, "indeterminate", "inspectionRequired"):
+      true
+    default:
+      false
+    }
+  }
+
+  private static func validPlanState(_ envelope: PinentryPlanContract) -> Bool {
+    guard !envelope.changed else { return false }
+    return
+      switch (
+        envelope.state.applicability,
+        envelope.state.changeRequired,
+        envelope.state.conflicts.isEmpty,
+        envelope.outcome
+      )
+    {
+    case (.ready, false, true, .ok),
+      (.ready, true, true, .warning),
+      (.blocked, _, false, .conflict):
       true
     default:
       false

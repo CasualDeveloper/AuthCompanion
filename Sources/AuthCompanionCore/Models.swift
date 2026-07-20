@@ -98,6 +98,14 @@ public struct DoctorState: Codable, Equatable, Sendable {
   public let pam: ComponentStatus
 }
 
+public struct FailureState: Codable, Equatable, Sendable {
+  public let reason: String
+
+  public init(reason: String) {
+    self.reason = reason
+  }
+}
+
 public struct AuthEnvelope<State: Codable & Equatable & Sendable>: Codable, Equatable, Sendable {
   public let schemaVersion: Int
   public let product: String

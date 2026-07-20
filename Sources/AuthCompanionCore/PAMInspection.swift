@@ -13,24 +13,28 @@ public struct PAMSnapshot: Equatable, Sendable {
   public let canonicalModuleExists: Bool
   public let legacyModuleExists: Bool
   public let versionedLegacyModuleExists: Bool
+  public let unsafeObjectExists: Bool
 
   public init(
     sudoLocal: Data,
     canonicalModuleExists: Bool,
     legacyModuleExists: Bool,
-    versionedLegacyModuleExists: Bool
+    versionedLegacyModuleExists: Bool,
+    unsafeObjectExists: Bool = false
   ) {
     self.sudoLocal = sudoLocal
     self.canonicalModuleExists = canonicalModuleExists
     self.legacyModuleExists = legacyModuleExists
     self.versionedLegacyModuleExists = versionedLegacyModuleExists
+    self.unsafeObjectExists = unsafeObjectExists
   }
 
   public static let empty = PAMSnapshot(
     sudoLocal: Data(),
     canonicalModuleExists: false,
     legacyModuleExists: false,
-    versionedLegacyModuleExists: false
+    versionedLegacyModuleExists: false,
+    unsafeObjectExists: false
   )
 }
 
@@ -43,6 +47,7 @@ public enum PAMInspector {
   private static let legacy = Set(["pam_watchid.so", "pam_watchid.so.2"])
 
   public static func inspect(_ snapshot: PAMSnapshot) -> PAMCondition {
+    guard !snapshot.unsafeObjectExists else { return .conflict }
     guard let policy = String(data: snapshot.sudoLocal, encoding: .utf8),
       !snapshot.sudoLocal.contains(0)
     else {
@@ -86,13 +91,14 @@ public enum PAMInspector {
   }
 
   private static func activeTokens(_ line: String) -> [String]? {
-    let tokens = line.prefix { $0 != "#" }.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+    let tokens = line.prefix { $0 != "#" }.split(whereSeparator: { $0.isWhitespace }).map(
+      String.init)
     return tokens.isEmpty ? nil : tokens
   }
 }
 
-private extension Data {
-  func contains(_ byte: UInt8) -> Bool {
+extension Data {
+  fileprivate func contains(_ byte: UInt8) -> Bool {
     contains(where: { $0 == byte })
   }
 }

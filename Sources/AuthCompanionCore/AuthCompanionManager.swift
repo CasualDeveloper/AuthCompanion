@@ -29,14 +29,21 @@ public final class AuthCompanionManager {
     }
 
     let pam = visiblePAMStatus(diagnostics: &diagnostics)
-    let outcome: SuiteOutcome =
-      pinentry.condition == .configured && pam.condition == .configured ? .ok : .warning
+    let outcome: SuiteOutcome
+    if diagnostics.contains(where: { $0.severity == .error }) {
+      outcome = .error
+    } else if pinentry.condition == .configured && pam.condition == .configured {
+      outcome = .ok
+    } else {
+      outcome = .warning
+    }
     return result(
       operation: "status",
       outcome: outcome,
       changed: false,
       diagnostics: diagnostics,
-      state: StatusState(pinentry: pinentry, pam: pam)
+      state: StatusState(pinentry: pinentry, pam: pam),
+      exitStatus: outcome == .error ? 1 : 0
     )
   }
 
@@ -51,7 +58,7 @@ public final class AuthCompanionManager {
       pinentry = ComponentStatus(
         component: "pinentry-companion",
         version: contract.componentVersion,
-        condition: contract.state.applicability == "ready" ? .ready : .conflict,
+        condition: contract.state.applicability == .ready ? .ready : .conflict,
         verification: "machineContractV1"
       )
       diagnostics += contract.diagnostics
@@ -61,12 +68,13 @@ public final class AuthCompanionManager {
     }
 
     let pam = visiblePAMStatus(diagnostics: &diagnostics)
-    let blocked = pinentry.condition == .unavailable || pinentry.condition == .conflict
+    let blocked =
+      pinentry.condition == .unavailable || pinentry.condition == .conflict
       || pam.condition == .conflict
     let sequence = [
       PlanStep(
         component: "pam-companion",
-        action: pam.condition == .configured ? "verify managed PAM state" : "preflight and configure PAM",
+        action: "preflight PAM configuration",
         requiresAdministrator: true,
         reversible: true
       ),
@@ -74,6 +82,14 @@ public final class AuthCompanionManager {
         component: "pinentry-companion",
         action: pinentryChangeRequired ? "configure GPG pinentry" : "adopt or verify GPG pinentry",
         requiresAdministrator: false,
+        reversible: true
+      ),
+      PlanStep(
+        component: "pam-companion",
+        action: pam.condition == .configured
+          ? "verify managed PAM state"
+          : "configure and verify PAM",
+        requiresAdministrator: true,
         reversible: true
       ),
     ]
@@ -96,9 +112,10 @@ public final class AuthCompanionManager {
       plan = try PinentryContractDecoder.plan(
         runner.run(pinentryInvocation(["plan", "--format", "json"]))
       )
-      let onlyTakeoverConflict = !plan.state.conflicts.isEmpty
+      let onlyTakeoverConflict =
+        !plan.state.conflicts.isEmpty
         && plan.state.conflicts.allSatisfy { $0.code == "foreignPinentryProgram" }
-      guard plan.state.applicability == "ready" || (takeOver && onlyTakeoverConflict) else {
+      guard plan.state.applicability == .ready || (takeOver && onlyTakeoverConflict) else {
         return mutationFailure(
           operation: "setup",
           diagnostic: SuiteDiagnostic(
@@ -143,7 +160,8 @@ public final class AuthCompanionManager {
       )
     }
 
-    let setupArguments = takeOver
+    let setupArguments =
+      takeOver
       ? ["setup", "--take-over", "--yes", "--format", "json"]
       : ["setup", "--yes", "--format", "json"]
     let pinentryMutation: PinentryMutationContract
@@ -323,7 +341,8 @@ public final class AuthCompanionManager {
     let pinentry: ComponentStatus
     do {
       let result = try runner.run(pinentryInvocation(["doctor"]))
-      pinentry = result.exitStatus == 0
+      pinentry =
+        result.exitStatus == 0
         ? ComponentStatus(
           component: "pinentry-companion",
           version: PinentryContractDecoder.supportedVersion,
@@ -342,10 +361,11 @@ public final class AuthCompanionManager {
     let pam: ComponentStatus
     do {
       let result = try runner.run(sudoInvocation([paths.pamExecutable, "doctor"]))
-      pam = result.exitStatus == 0
+      pam =
+        result.exitStatus == 0
         ? ComponentStatus(
           component: "pam-companion",
-          version: "0.1.0",
+          version: SupportedComponentVersions.pamCompanion,
           condition: .healthy,
           verification: "componentDoctor"
         )
@@ -400,12 +420,13 @@ public final class AuthCompanionManager {
         pinentryRecovered = restore.outcome == .ok
         diagnostics += restore.diagnostics
         if !pinentryRecovered {
-          diagnostics.append(SuiteDiagnostic(
-            code: "pinentry.rollback.failed",
-            severity: .error,
-            message: "pinentry-companion could not restore its pre-setup state.",
-            remediation: "Run pinentry-companion restore --yes --format json."
-          ))
+          diagnostics.append(
+            SuiteDiagnostic(
+              code: "pinentry.rollback.failed",
+              severity: .error,
+              message: "pinentry-companion could not restore its pre-setup state.",
+              remediation: "Run pinentry-companion restore --yes --format json."
+            ))
         }
       } catch {
         pinentry = unavailable(component: "pinentry-companion")
@@ -414,7 +435,8 @@ public final class AuthCompanionManager {
     }
 
     let rollbackAttempted = pamWasApplied || mutation.changed
-    let recovery: RecoveryState = pamRecovered && pinentryRecovered
+    let recovery: RecoveryState =
+      pamRecovered && pinentryRecovered
       ? (rollbackAttempted ? .rolledBack : .notNeeded)
       : .manualRequired
     return result(
@@ -436,7 +458,7 @@ public final class AuthCompanionManager {
       let condition = try PAMInspector.inspect(pamSnapshots.read())
       return ComponentStatus(
         component: "pam-companion",
-        version: condition == .configured ? "0.1.0" : nil,
+        version: condition == .configured ? SupportedComponentVersions.pamCompanion : nil,
         condition: componentCondition(condition),
         verification: "visibleFilesystem"
       )
@@ -449,7 +471,7 @@ public final class AuthCompanionManager {
   private func restoredPAMStatus() -> ComponentStatus {
     ComponentStatus(
       component: "pam-companion",
-      version: "0.1.0",
+      version: SupportedComponentVersions.pamCompanion,
       condition: .restored,
       verification: "componentLifecycle"
     )
@@ -458,9 +480,9 @@ public final class AuthCompanionManager {
   private func pinentryStatus(_ contract: PinentryStatusContract) -> ComponentStatus {
     let condition: ComponentCondition
     switch contract.state.gpgConfiguration.alignment {
-    case "currentBinary": condition = .configured
-    case "foreign": condition = .conflict
-    default: condition = .notConfigured
+    case .currentBinary: condition = .configured
+    case .missing: condition = .notConfigured
+    case .otherBinary, .ambiguous, .unknown: condition = .conflict
     }
     return ComponentStatus(
       component: "pinentry-companion",
@@ -474,7 +496,7 @@ public final class AuthCompanionManager {
     ComponentStatus(
       component: "pinentry-companion",
       version: plan.componentVersion,
-      condition: plan.state.applicability == "ready" ? .ready : .conflict,
+      condition: plan.state.applicability == .ready ? .ready : .conflict,
       verification: "machineContractV1"
     )
   }
@@ -541,11 +563,12 @@ public final class AuthCompanionManager {
   private func toolFailure(_ code: String, result: ToolResult) -> SuiteDiagnostic {
     let detail = String(data: result.stderr, encoding: .utf8)?
       .trimmingCharacters(in: .whitespacesAndNewlines)
-    let message = if let detail, !detail.isEmpty {
-      detail
-    } else {
-      "The component command failed."
-    }
+    let message =
+      if let detail, !detail.isEmpty {
+        detail
+      } else {
+        "The component command failed."
+      }
     return SuiteDiagnostic(
       code: code,
       severity: .error,
