@@ -133,6 +133,20 @@ swiftly run ./Scripts/package-release.sh --allow-dirty
 
 See [RELEASING.md](RELEASING.md) for the release and single live setup gate.
 
+## How it was built
+
+AuthCompanion was developed with Codex and GPT-5.6 as engineering tools. Codex
+helped inspect the existing component code, implement and test the Swift 6 PAM
+module and orchestration CLI, and exercise the packaging, release, recovery,
+and rollback paths. GPT-5.6 was used to reason through the security model and
+failure cases, especially partial PAM commits, configuration drift, and how to
+prove that a rollback completed.
+
+The architecture and product decisions remained human-led, and every Touch ID,
+Apple Watch, GPG-signing, and `sudo` path was verified on real Mac hardware.
+Neither Codex nor GPT-5.6 is part of the shipped product: AuthCompanion makes no
+model calls at runtime.
+
 ## Privacy
 
 AuthCompanion has no daemon, network service, telemetry, or credential store.
