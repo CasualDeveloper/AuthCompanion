@@ -37,9 +37,10 @@ Human output is the default. JSON output is a stable versioned contract.
 Mutations require the literal `--yes`; AuthCompanion itself must run as the
 login user, not root. The user authorizes `/usr/bin/sudo` directly with
 `sudo -v`. AuthCompanion invokes `/usr/bin/sudo -n` only for the fixed
-`pam-companion` executable and fixed lifecycle arguments. Component processes
-receive `/dev/null` as standard input, so the coordinator cannot collect a
-password.
+`pam-companion` executable and fixed lifecycle arguments, so sudo fails instead
+of requesting a password when authorization is unavailable. Component
+processes also receive `/dev/null` as standard input. No shipped coordinator
+path reads an administrator password.
 
 `status` and `plan` are passive. They invoke only pinentry-companion's passive
 JSON endpoints and inspect the readable PAM policy/module paths. They never

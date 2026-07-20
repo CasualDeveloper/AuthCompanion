@@ -23,9 +23,9 @@ authcompanion setup --yes
 
 The Homebrew formula installs both component formulas as dependencies. Run
 AuthCompanion as your login user, without `sudo`. Authorize `sudo` directly
-before setup. AuthCompanion invokes only non-interactive `sudo -n` commands for
-the PAM steps and connects component input to `/dev/null`, so it cannot prompt
-for or read your administrator password.
+before setup. AuthCompanion invokes only `sudo -n` commands, which tell sudo to
+fail instead of requesting a password. Component input is also connected to
+`/dev/null`. AuthCompanion never reads or stores your administrator password.
 
 Setup performs these operations in order:
 

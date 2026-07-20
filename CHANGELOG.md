@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.1 - 2026-07-21
+
+### Fixed
+
+- Require users to authorize sudo directly with `sudo -v` before setup,
+  restore, or doctor.
+- Run every coordinator-owned sudo command with `-n` so unavailable
+  authorization fails instead of presenting a password prompt.
+- Connect component standard input to `/dev/null`; no shipped coordinator path
+  reads an administrator password.
+
 ## 0.1.0 - 2026-07-20
 
 ### Added
