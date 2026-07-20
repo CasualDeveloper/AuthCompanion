@@ -561,7 +561,7 @@ public final class AuthCompanionManager {
   }
 
   private func sudoInvocation(_ arguments: [String]) -> ToolInvocation {
-    ToolInvocation(executable: paths.sudoExecutable, arguments: arguments)
+    ToolInvocation(executable: paths.sudoExecutable, arguments: ["-n", "--"] + arguments)
   }
 
   private func componentFailure(_ component: String, error: any Error) -> SuiteDiagnostic {

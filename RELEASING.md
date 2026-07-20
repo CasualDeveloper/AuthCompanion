@@ -31,7 +31,7 @@ system-only linked dependencies, CLI version, help, and passive JSON output.
 ## Draft release
 
 Push the reviewed source to `main` and wait for the hosted macOS checks. Create
-and push the matching annotated tag, such as `v0.1.0`. The tag workflow rebuilds
+and push the matching annotated tag, such as `v0.1.1`. The tag workflow rebuilds
 from that tag, checks intrinsic version equality, attests the archive, and
 creates a draft GitHub release. It does not publish automatically.
 
@@ -49,8 +49,9 @@ repeat the components' full authentication matrices.
    dependencies.
 3. Extract the exact draft archive and run `authcompanion status` and
    `authcompanion plan` from it.
-4. Run `authcompanion setup --yes` once. Complete the sudo authentication when
-   macOS requests it. Do not run `sudo -k` between coordinator steps.
+4. Run `sudo -v` directly, then run `authcompanion setup --yes` once. Confirm
+   AuthCompanion never presents or reads a password prompt. Do not run
+   `sudo -k` between coordinator steps.
 5. Run `authcompanion status` and `authcompanion doctor` immediately. The
    existing sudo timestamp should cover the PAM doctor command.
 6. Confirm GPG signing still uses pinentry-companion and a normal `sudo` command

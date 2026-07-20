@@ -29,7 +29,7 @@ public final class SystemToolRunner: ToolRunning {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: invocation.executable)
     process.arguments = invocation.arguments
-    process.standardInput = FileHandle.standardInput
+    process.standardInput = FileHandle.nullDevice
     process.standardOutput = capture
     process.standardError = FileHandle.standardError
     try process.run()

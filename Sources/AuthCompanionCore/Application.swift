@@ -86,6 +86,21 @@ public final class AuthCompanionApplication {
       )
     }
 
+    if requiresAdministratorAuthorization(command) {
+      do {
+        let authorization = try runner.run(
+          ToolInvocation(
+            executable: paths.sudoExecutable,
+            arguments: ["-n", "--", "/usr/bin/true"]
+          ))
+        guard authorization.exitStatus == 0 else {
+          return authorizationRequired(command: command)
+        }
+      } catch {
+        return authorizationRequired(command: command)
+      }
+    }
+
     let manager = AuthCompanionManager(
       paths: paths,
       runner: runner,
@@ -118,6 +133,24 @@ public final class AuthCompanionApplication {
     case .help, .version:
       return ApplicationOutput(exitStatus: 0)
     }
+  }
+
+  private func requiresAdministratorAuthorization(_ command: AuthCommand) -> Bool {
+    switch command {
+    case .setup, .restore, .doctor:
+      true
+    case .status, .plan, .help, .version:
+      false
+    }
+  }
+
+  private func authorizationRequired(command: AuthCommand) -> ApplicationOutput {
+    failure(
+      command: command,
+      code: "sudo.authorizationRequired",
+      message: "Administrator authorization is required before this command can run.",
+      remediation: "Run `sudo -v`, then rerun the same authcompanion command."
+    )
   }
 
   private func render<State: Codable & Equatable & Sendable>(

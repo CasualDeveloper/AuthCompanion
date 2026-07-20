@@ -401,7 +401,7 @@ final class SuiteManagerTests: XCTestCase {
   }
 
   private func sudo(_ arguments: [String]) -> ToolInvocation {
-    ToolInvocation(executable: paths.sudoExecutable, arguments: arguments)
+    ToolInvocation(executable: paths.sudoExecutable, arguments: ["-n", "--"] + arguments)
   }
 }
 

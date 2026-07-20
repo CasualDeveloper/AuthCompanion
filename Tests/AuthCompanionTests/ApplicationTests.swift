@@ -14,7 +14,7 @@ final class ApplicationTests: XCTestCase {
 
     XCTAssertEqual(help.exitStatus, 0)
     XCTAssertTrue(help.stdout.contains("Usage:"))
-    XCTAssertEqual(version.stdout, "authcompanion 0.1.0\n")
+    XCTAssertEqual(version.stdout, "authcompanion 0.1.1\n")
     XCTAssertEqual(locator.locateCount, 0)
     XCTAssertTrue(runner.invocations.isEmpty)
   }
@@ -93,6 +93,44 @@ final class ApplicationTests: XCTestCase {
     XCTAssertTrue(output.stderr.contains("brew install"))
     XCTAssertTrue(output.stderr.contains("pinentry-companion"))
     XCTAssertTrue(output.stderr.contains("pam-companion"))
+  }
+
+  func testSetupWithoutSudoAuthorizationFailsBeforeMutation() {
+    let paths = ComponentPaths(
+      pinentryExecutable: "/fixed/pinentry-companion",
+      pamExecutable: "/fixed/pam-companion",
+      sudoExecutable: "/usr/bin/sudo"
+    )
+    let runner = ApplicationRunner(results: [
+      ToolResult(
+        exitStatus: 0,
+        stdout: Data("pinentry-companion 0.2.0\n".utf8),
+        stderr: Data()
+      ),
+      ToolResult(
+        exitStatus: 0,
+        stdout: Data("pam-companion 0.1.0\n".utf8),
+        stderr: Data()
+      ),
+      ToolResult(exitStatus: 1, stdout: Data(), stderr: Data()),
+    ])
+    let application = makeApplication(
+      effectiveUserID: 501,
+      locator: ApplicationLocator(paths: paths),
+      runner: runner
+    )
+
+    let output = application.run(["authcompanion", "setup", "--yes"])
+
+    XCTAssertEqual(output.exitStatus, 1)
+    XCTAssertTrue(output.stderr.contains("sudo -v"))
+    XCTAssertEqual(
+      runner.invocations.last,
+      ToolInvocation(
+        executable: paths.sudoExecutable,
+        arguments: ["-n", "--", "/usr/bin/true"]
+      ))
+    XCTAssertEqual(runner.invocations.count, 3)
   }
 
   func testInvalidInvocationUsesUsageExitStatusWithoutResolvingDependencies() {

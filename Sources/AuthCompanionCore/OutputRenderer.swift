@@ -13,8 +13,8 @@ enum AuthOutputRenderer {
       authcompanion --version
       authcompanion --help
 
-    Run AuthCompanion as your login user. It invokes sudo only for the
-    pam-companion lifecycle commands that require administrator access.
+    Run AuthCompanion as your login user. Run `sudo -v` directly before setup,
+    restore, or doctor; AuthCompanion never reads an administrator password.
     """
 
   static func status(_ result: AuthCommandResult<StatusState>) -> String {
@@ -33,7 +33,7 @@ enum AuthOutputRenderer {
     }.joined(separator: "\n")
     let next =
       result.exitStatus == 0
-      ? "Run `authcompanion setup --yes` to apply this plan."
+      ? "Run `sudo -v && authcompanion setup --yes` to apply this plan."
       : "Resolve the reported conflicts, then run the plan again."
     return """
       AuthCompanion plan

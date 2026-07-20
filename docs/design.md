@@ -35,8 +35,11 @@ authcompanion --help
 
 Human output is the default. JSON output is a stable versioned contract.
 Mutations require the literal `--yes`; AuthCompanion itself must run as the
-login user, not root. It invokes `/usr/bin/sudo` only for the fixed
-`pam-companion` executable and fixed lifecycle arguments.
+login user, not root. The user authorizes `/usr/bin/sudo` directly with
+`sudo -v`. AuthCompanion invokes `/usr/bin/sudo -n` only for the fixed
+`pam-companion` executable and fixed lifecycle arguments. Component processes
+receive `/dev/null` as standard input, so the coordinator cannot collect a
+password.
 
 `status` and `plan` are passive. They invoke only pinentry-companion's passive
 JSON endpoints and inspect the readable PAM policy/module paths. They never
@@ -45,11 +48,12 @@ invoke `sudo`, write files, reload GPG, access Keychain, or authenticate.
 ## Setup sequence
 
 1. Read pinentry's passive plan and visible PAM state.
-2. Run `sudo pam-companion setup --dry-run` before any mutation.
+2. Verify an existing sudo authorization and run
+   `sudo -n pam-companion setup --dry-run` before any mutation.
 3. Run `pinentry-companion setup --yes --format json` (or its explicit
    `--take-over` form).
-4. Run `sudo pam-companion setup`.
-5. Run `sudo pam-companion doctor` and verify visible PAM postconditions.
+4. Run `sudo -n pam-companion setup`.
+5. Run `sudo -n pam-companion doctor` and verify visible PAM postconditions.
 
 If PAM setup fails after pinentry committed a change, AuthCompanion asks PAM to
 recover its transaction and then invokes pinentry's exact machine restore. A
@@ -58,7 +62,8 @@ manual recovery required. There is no speculative replay.
 
 ## Restore sequence
 
-1. Run `sudo pam-companion restore --dry-run`.
+1. Verify an existing sudo authorization and run
+   `sudo -n pam-companion restore --dry-run`.
 2. Restore PAM.
 3. Restore pinentry through its machine contract.
 

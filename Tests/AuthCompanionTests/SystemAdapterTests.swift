@@ -28,6 +28,21 @@ final class SystemToolRunnerTests: XCTestCase {
       XCTAssertEqual(error as? SystemToolError, .outputTooLarge)
     }
   }
+
+  func testReportsChildExitStatus() throws {
+    let result = try SystemToolRunner().run(
+      ToolInvocation(executable: "/usr/bin/false", arguments: []))
+
+    XCTAssertEqual(result.exitStatus, 1)
+  }
+
+  func testProvidesNoStandardInputToComponentCommands() throws {
+    let result = try SystemToolRunner().run(
+      ToolInvocation(executable: "/bin/cat", arguments: []))
+
+    XCTAssertEqual(result.exitStatus, 0)
+    XCTAssertTrue(result.stdout.isEmpty)
+  }
 }
 
 final class FileSystemPAMSnapshotReaderTests: XCTestCase {

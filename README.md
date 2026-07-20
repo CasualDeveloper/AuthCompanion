@@ -17,13 +17,15 @@ components but does not duplicate their authentication or configuration code.
 brew install CasualDeveloper/tap/authcompanion
 authcompanion status
 authcompanion plan
+sudo -v
 authcompanion setup --yes
 ```
 
 The Homebrew formula installs both component formulas as dependencies. Run
-AuthCompanion as your login user, without `sudo`. During setup it invokes
-`sudo pam-companion` for the PAM steps that require administrator access. It
-never reads or stores your administrator password.
+AuthCompanion as your login user, without `sudo`. Authorize `sudo` directly
+before setup. AuthCompanion invokes only non-interactive `sudo -n` commands for
+the PAM steps and connects component input to `/dev/null`, so it cannot prompt
+for or read your administrator password.
 
 Setup performs these operations in order:
 
@@ -33,9 +35,9 @@ Setup performs these operations in order:
 4. Configure pam-companion and verify its health.
 5. Verify the visible PAM policy and module postcondition.
 
-The related `sudo` commands run together, so macOS normally reuses the same
-short-lived sudo authentication timestamp. AuthCompanion does not invalidate
-that timestamp or force repeated authentication.
+The related privileged commands reuse the short-lived authorization created by
+`sudo -v`. If it is missing or expires, AuthCompanion stops and asks you to run
+`sudo -v` again instead of presenting its own password prompt.
 
 If GPG already points to a different pinentry and you intend to replace it,
 review the plan and use the explicit takeover form:
@@ -48,8 +50,8 @@ authcompanion setup --take-over --yes
 
 ```sh
 authcompanion status
-authcompanion doctor
-authcompanion restore --yes
+sudo -v && authcompanion doctor
+sudo -v && authcompanion restore --yes
 ```
 
 `status` and `plan` are passive. They do not invoke `sudo`, write files, reload
@@ -128,7 +130,7 @@ Create and verify a local candidate without changing authentication state:
 
 ```sh
 swiftly run ./Scripts/package-release.sh --allow-dirty
-./Scripts/verify-release.sh dist/authcompanion-0.1.0.tar.gz
+./Scripts/verify-release.sh dist/authcompanion-0.1.1.tar.gz
 ```
 
 See [RELEASING.md](RELEASING.md) for the release and single live setup gate.
