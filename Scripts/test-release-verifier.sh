@@ -1,0 +1,37 @@
+#!/bin/sh
+
+set -eu
+
+[ "$#" -eq 1 ] || {
+    echo "usage: test-release-verifier.sh <authcompanion-version.tar.gz>" >&2
+    exit 2
+}
+
+script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+archive=$1
+archive_name=$(basename "$archive")
+package_name=${archive_name%.tar.gz}
+scratch_root=$(mktemp -d "${TMPDIR:-/tmp}/authcompanion-verifier-test.XXXXXX")
+cleanup() {
+    [ ! -d "$scratch_root" ] || rm -rf -- "$scratch_root"
+}
+trap cleanup EXIT
+
+tar -xzf "$archive" -C "$scratch_root"
+chmod 0755 "$scratch_root/$package_name/bin/authcompanion"
+COPYFILE_DISABLE=1 tar \
+    --uid 0 \
+    --gid 0 \
+    --uname root \
+    --gname wheel \
+    -C "$scratch_root" \
+    -czf "$scratch_root/$archive_name" \
+    "$package_name"
+
+if "$script_directory/verify-release.sh" "$scratch_root/$archive_name" \
+    > "$scratch_root/output" 2>&1; then
+    echo "release verifier accepted an archive with a writable executable mode" >&2
+    exit 1
+fi
+grep -Fq 'CLI mode must be 0555' "$scratch_root/output"
+echo "PASS: release verifier rejects a tampered executable mode"

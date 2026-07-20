@@ -1,0 +1,127 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    env:
+      DEVELOPER_DIR: ${{ matrix.developer_directory }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS 26 Tahoe
+            runner: macos-26
+            developer_directory: /Applications/Xcode.app/Contents/Developer
+          - name: macOS 15 Sequoia
+            runner: macos-15
+            developer_directory: /Applications/Xcode.app/Contents/Developer
+          - name: macOS 14 Sonoma
+            runner: macos-14
+            developer_directory: /Applications/Xcode_16.2.app/Contents/Developer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Runner versions
+        run: |
+          sw_vers
+          uname -m
+          swift --version
+
+      - name: Build
+        run: |
+          swift build -c release --product authcompanion \
+            -Xswiftc -warnings-as-errors \
+            -Xswiftc -strict-concurrency=complete
+
+      - name: Test
+        run: |
+          swift test \
+            -Xswiftc -warnings-as-errors \
+            -Xswiftc -strict-concurrency=complete
+
+      - name: Passive CLI smoke
+        run: |
+          binary="$(swift build -c release --show-bin-path)/authcompanion"
+          test "$($binary --version)" = "authcompanion 0.1.0"
+          "$binary" --help | grep -Fq 'authcompanion setup --yes'
+
+  package:
+    name: Package release archive
+    needs: test
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Swift 6.3.3
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            https://download.swift.org/swiftly/darwin/swiftly.pkg \
+            --output "$RUNNER_TEMP/swiftly.pkg"
+          /usr/sbin/installer \
+            -pkg "$RUNNER_TEMP/swiftly.pkg" \
+            -target CurrentUserHomeDirectory
+          "$HOME/.swiftly/bin/swiftly" init \
+            --skip-install \
+            --no-modify-profile \
+            --quiet-shell-followup \
+            --assume-yes
+          "$HOME/.swiftly/bin/swiftly" install 6.3.3 --assume-yes
+          echo "$HOME/.swiftly/bin" >> "$GITHUB_PATH"
+
+      - name: Package and verify
+        run: |
+          swiftly run swift --version | grep -F 'Swift version 6.3.3'
+          swiftly run swift format lint --recursive Sources Tests Package.swift
+          swiftly run ./Scripts/package-release.sh
+          ./Scripts/verify-release.sh dist/authcompanion-*.tar.gz
+          ./Scripts/test-release-verifier.sh dist/authcompanion-*.tar.gz
+          (cd dist && shasum -a 256 -c SHA256SUMS)
+
+      - name: Upload exact archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: authcompanion-${{ github.sha }}
+          path: |
+            dist/authcompanion-*.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
+  smoke:
+    name: Exact archive smoke (${{ matrix.name }})
+    needs: package
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS 26 Tahoe
+            runner: macos-26
+          - name: macOS 15 Sequoia
+            runner: macos-15
+          - name: macOS 14 Sonoma
+            runner: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Download exact archive
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: authcompanion-${{ github.sha }}
+          path: dist
+
+      - name: Verify and smoke
+        run: |
+          (cd dist && shasum -a 256 -c SHA256SUMS)
+          ./Scripts/verify-release.sh dist/authcompanion-*.tar.gz
