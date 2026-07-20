@@ -51,9 +51,10 @@ invoke `sudo`, write files, reload GPG, access Keychain, or authenticate.
 4. Run `sudo pam-companion setup`.
 5. Run `sudo pam-companion doctor` and verify visible PAM postconditions.
 
-If PAM setup fails after pinentry committed a change, AuthCompanion invokes the
-component's exact machine restore. A failed or indeterminate pinentry rollback
-is reported as manual recovery required. There is no speculative replay.
+If PAM setup fails after pinentry committed a change, AuthCompanion asks PAM to
+recover its transaction and then invokes pinentry's exact machine restore. A
+failed PAM recovery or failed or indeterminate pinentry rollback is reported as
+manual recovery required. There is no speculative replay.
 
 ## Restore sequence
 

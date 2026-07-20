@@ -69,10 +69,10 @@ Each component owns its own state:
   record;
 - AuthCompanion stores no third lifecycle database.
 
-If PAM fails after pinentry setup, AuthCompanion restores pinentry. If PAM was
-already committed when its health check fails, AuthCompanion restores PAM first
-and then pinentry. It reports `manualRequired` if either component cannot prove
-its rollback.
+If PAM fails after pinentry setup, AuthCompanion asks PAM to recover and then
+restores pinentry. If PAM was already committed when its health check fails,
+AuthCompanion restores PAM first and then pinentry. It reports
+`manualRequired` if either component cannot prove its rollback.
 
 ## Commands and JSON output
 
