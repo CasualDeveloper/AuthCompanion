@@ -57,7 +57,7 @@ final class SuiteManagerTests: XCTestCase {
   func testSetupPreflightsThenMutatesPinentryBeforePAMAndVerifiesHealth() {
     let runner = RecordingToolRunner(results: [
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
-      .success(stdout: Data("would install pam_companion.so and update sudo_local\n".utf8)),
+      .success(stdout: Data("would enable the native pam_tid.so sudo integration\n".utf8)),
       .success(
         stdout: pinentryMutationJSON(
           operation: "setup",
@@ -65,8 +65,8 @@ final class SuiteManagerTests: XCTestCase {
           transactionState: "committed",
           safety: "exactRestoreStateRecorded"
         )),
-      .success(stdout: Data("installed pam_companion.so and updated sudo_local\n".utf8)),
-      .success(stdout: Data("ok: pam_companion.so is installed and sudo_local is managed\n".utf8)),
+      .success(stdout: Data("enabled the native pam_tid.so sudo integration\n".utf8)),
+      .success(stdout: Data("ok: pam_tid.so is enabled and sudo_local is managed\n".utf8)),
     ])
     let manager = makeManager(
       runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .configured))
@@ -457,8 +457,8 @@ extension PAMCondition {
     switch self {
     case .configured:
       PAMSnapshot(
-        sudoLocal: Data("auth sufficient pam_companion.so\nauth sufficient pam_tid.so\n".utf8),
-        canonicalModuleExists: true,
+        sudoLocal: Data("auth sufficient pam_tid.so\n".utf8),
+        canonicalModuleExists: false,
         legacyModuleExists: false,
         versionedLegacyModuleExists: false
       )
@@ -473,8 +473,8 @@ extension PAMCondition {
       .empty
     case .unmanaged:
       PAMSnapshot(
-        sudoLocal: Data(),
-        canonicalModuleExists: true,
+        sudoLocal: Data("auth sufficient pam_tid.so\n".utf8),
+        canonicalModuleExists: false,
         legacyModuleExists: false,
         versionedLegacyModuleExists: false
       )

@@ -3,22 +3,14 @@ import XCTest
 @testable import AuthCompanionCore
 
 final class PAMInspectionTests: XCTestCase {
-  func testRecognizesCanonicalConfigurationOnlyWhenModuleAndOrderAreCorrect() {
+  func testRecognizesNativeTouchIDConfiguration() {
     let configured = PAMSnapshot(
-      sudoLocal: Data("auth sufficient pam_companion.so\nauth sufficient pam_tid.so\n".utf8),
-      canonicalModuleExists: true,
+      sudoLocal: Data("auth sufficient pam_tid.so\n".utf8),
+      canonicalModuleExists: false,
       legacyModuleExists: false,
       versionedLegacyModuleExists: false
     )
     XCTAssertEqual(PAMInspector.inspect(configured), .configured)
-
-    let wrongOrder = PAMSnapshot(
-      sudoLocal: Data("auth sufficient pam_tid.so\nauth sufficient pam_companion.so\n".utf8),
-      canonicalModuleExists: true,
-      legacyModuleExists: false,
-      versionedLegacyModuleExists: false
-    )
-    XCTAssertEqual(PAMInspector.inspect(wrongOrder), .conflict)
   }
 
   func testClassifiesMissingLegacyUnmanagedAndConflictingStates() {
@@ -44,7 +36,7 @@ final class PAMInspectionTests: XCTestCase {
           legacyModuleExists: false,
           versionedLegacyModuleExists: false
         )),
-      .unmanaged
+      .legacy
     )
     XCTAssertEqual(
       PAMInspector.inspect(
@@ -92,10 +84,10 @@ final class PAMInspectionTests: XCTestCase {
     XCTAssertEqual(PAMInspector.inspect(snapshot), .conflict)
   }
 
-  func testAcceptsPamCompanionSupportedReasonAndTimeoutArguments() {
+  func testClassifiesCustomModuleConfigurationAndArgumentsAsLegacy() {
     let snapshot = PAMSnapshot(
       sudoLocal: Data(
-        "auth sufficient pam_companion.so reason=Approve timeout=120\nauth sufficient pam_tid.so\n"
+        "auth sufficient pam_companion.so old-option arbitrary=value\nauth sufficient pam_tid.so\n"
           .utf8
       ),
       canonicalModuleExists: true,
@@ -103,14 +95,13 @@ final class PAMInspectionTests: XCTestCase {
       versionedLegacyModuleExists: false
     )
 
-    XCTAssertEqual(PAMInspector.inspect(snapshot), .configured)
+    XCTAssertEqual(PAMInspector.inspect(snapshot), .legacy)
   }
 
-  func testRejectsInvalidArgumentsDuplicateTouchIDAndUnrelatedActiveModules() {
+  func testRejectsDuplicateModulesAndUnrelatedActiveModules() {
     for policy in [
-      "auth sufficient pam_companion.so timeout=0\n",
-      "auth sufficient pam_companion.so reason=a reason=b\n",
       "auth sufficient pam_companion.so\nauth sufficient pam_tid.so\nauth sufficient pam_tid.so\n",
+      "auth sufficient pam_companion.so\nauth sufficient pam_watchid.so\n",
       "auth sufficient pam_companion.so\nauth required pam_opendirectory.so\n",
     ] {
       let snapshot = PAMSnapshot(

@@ -58,13 +58,12 @@ final class FileSystemPAMSnapshotReaderTests: XCTestCase {
     try FileManager.default.removeItem(at: fixtureURL)
   }
 
-  func testReadsAVisibleCanonicalPAMInstallation() throws {
+  func testReadsAVisibleNativePAMInstallation() throws {
     let paths = fixturePaths()
     try write(
-      "auth sufficient pam_companion.so\nauth sufficient pam_tid.so\n",
+      "auth sufficient pam_tid.so\n",
       to: paths.sudoLocal
     )
-    try write("module", to: paths.canonicalModule)
 
     let snapshot = try FileSystemPAMSnapshotReader(
       paths: paths,
