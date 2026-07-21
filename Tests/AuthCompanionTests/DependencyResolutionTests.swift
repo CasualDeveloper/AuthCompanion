@@ -18,7 +18,7 @@ final class DependencyResolutionTests: XCTestCase {
 
   func testResolvesOnlyExecutablesInsideFormulaCellars() throws {
     let pinentry = try installFormula(name: "pinentry-companion", version: "0.2.0")
-    let pam = try installFormula(name: "pam-companion", version: "0.1.0")
+    let pam = try installFormula(name: "pam-companion", version: "0.1.1")
     let locator = HomebrewComponentLocator(prefixes: [fixtureURL.path])
 
     let paths = try locator.locate()
@@ -29,7 +29,7 @@ final class DependencyResolutionTests: XCTestCase {
   }
 
   func testRejectsOptLinkThatEscapesFormulaCellar() throws {
-    _ = try installFormula(name: "pam-companion", version: "0.1.0")
+    _ = try installFormula(name: "pam-companion", version: "0.1.1")
     let executable = fixtureURL.appendingPathComponent("outside/pinentry-companion")
     try FileManager.default.createDirectory(
       at: executable.deletingLastPathComponent(),
@@ -54,7 +54,7 @@ final class DependencyResolutionTests: XCTestCase {
   func testVerifierRequiresExactReleasedVersions() throws {
     let runner = DependencyStubRunner(results: [
       ToolResult(exitStatus: 0, stdout: Data("pinentry-companion 0.2.0\n".utf8), stderr: Data()),
-      ToolResult(exitStatus: 0, stdout: Data("pam-companion 0.1.0\n".utf8), stderr: Data()),
+      ToolResult(exitStatus: 0, stdout: Data("pam-companion 0.1.1\n".utf8), stderr: Data()),
     ])
     let paths = ComponentPaths(
       pinentryExecutable: "/fixed/pinentry-companion",

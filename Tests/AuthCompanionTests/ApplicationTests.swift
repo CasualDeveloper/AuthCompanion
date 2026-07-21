@@ -14,7 +14,7 @@ final class ApplicationTests: XCTestCase {
 
     XCTAssertEqual(help.exitStatus, 0)
     XCTAssertTrue(help.stdout.contains("Usage:"))
-    XCTAssertEqual(version.stdout, "authcompanion 0.1.1\n")
+    XCTAssertEqual(version.stdout, "authcompanion 0.1.2\n")
     XCTAssertEqual(locator.locateCount, 0)
     XCTAssertTrue(runner.invocations.isEmpty)
   }
@@ -50,7 +50,7 @@ final class ApplicationTests: XCTestCase {
       ),
       ToolResult(
         exitStatus: 0,
-        stdout: Data("pam-companion 0.1.0\n".utf8),
+        stdout: Data("pam-companion 0.1.1\n".utf8),
         stderr: Data()
       ),
       ToolResult(exitStatus: 0, stdout: pinentryStatusJSON(), stderr: Data()),
@@ -211,7 +211,7 @@ final class ApplicationTests: XCTestCase {
       ),
       ToolResult(
         exitStatus: 0,
-        stdout: Data("pam-companion 0.1.0\n".utf8),
+        stdout: Data("pam-companion 0.1.1\n".utf8),
         stderr: Data()
       ),
     ]
@@ -258,8 +258,8 @@ private final class ApplicationRunner: ToolRunning {
 private final class ApplicationPAMSnapshotReader: PAMSnapshotReading {
   func read() throws -> PAMSnapshot {
     PAMSnapshot(
-      sudoLocal: Data("auth sufficient pam_companion.so\nauth sufficient pam_tid.so\n".utf8),
-      canonicalModuleExists: true,
+      sudoLocal: Data("auth sufficient pam_tid.so\n".utf8),
+      canonicalModuleExists: false,
       legacyModuleExists: false,
       versionedLegacyModuleExists: false
     )

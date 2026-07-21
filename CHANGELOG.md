@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2 - 2026-07-21
+
+### Fixed
+
+- Support pam-companion 0.1.1 and its native `pam_tid.so` lifecycle.
+- Report the native Touch ID policy as configured while treating retired
+  `pam_companion.so` and `pam_watchid.so` installations as migration state.
+
 ## 0.1.1 - 2026-07-21
 
 ### Fixed

@@ -15,7 +15,7 @@ distribution complexity without improving the authentication paths.
 The supported component contracts are initially exact:
 
 - `pinentry-companion` 0.2.0 machine contract v1;
-- `pam-companion` 0.1.0 fixed CLI and exit-status contract.
+- `pam-companion` 0.1.1 native `pam_tid.so` lifecycle contract.
 
 The Homebrew formula depends on both formulas. Runtime discovery resolves only
 their fixed `opt` paths below the Homebrew prefix; AuthCompanion never searches

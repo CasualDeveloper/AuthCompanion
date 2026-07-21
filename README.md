@@ -102,7 +102,7 @@ an executable override, or builds a shell command.
 
 - macOS 14 or newer
 - `pinentry-companion` 0.2.0
-- `pam-companion` 0.1.0
+- `pam-companion` 0.1.1
 - Swift 6.3.3 for release archives
 - macOS Command Line Tools for builds and packaging
 - Xcode, or another toolchain containing XCTest, only for the test suite
@@ -130,7 +130,7 @@ Create and verify a local candidate without changing authentication state:
 
 ```sh
 swiftly run ./Scripts/package-release.sh --allow-dirty
-./Scripts/verify-release.sh dist/authcompanion-0.1.1.tar.gz
+./Scripts/verify-release.sh dist/authcompanion-0.1.2.tar.gz
 ```
 
 See [RELEASING.md](RELEASING.md) for the release and single live setup gate.
