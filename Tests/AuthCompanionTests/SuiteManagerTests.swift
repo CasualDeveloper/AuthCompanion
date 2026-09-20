@@ -54,6 +54,21 @@ final class SuiteManagerTests: XCTestCase {
     XCTAssertEqual(result.envelope.outcome, .warning)
   }
 
+  func testPlanFailsWhenPAMInspectionIsUnavailable() {
+    let runner = RecordingToolRunner(results: [
+      .success(stdout: pinentryPlanJSON(changeRequired: false))
+    ])
+    let snapshots = StubPAMSnapshotReader(error: TestError.missingResult)
+    let manager = makeManager(runner: runner, snapshots: snapshots)
+
+    let result = manager.plan()
+
+    XCTAssertEqual(result.exitStatus, 1)
+    XCTAssertEqual(result.envelope.outcome, .conflict)
+    XCTAssertEqual(result.envelope.state.pam.condition, .unavailable)
+    XCTAssertTrue(result.envelope.diagnostics.contains { $0.severity == .error })
+  }
+
   func testSetupPreflightsThenMutatesPinentryBeforePAMAndVerifiesHealth() {
     let runner = RecordingToolRunner(results: [
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
@@ -422,18 +437,27 @@ private final class RecordingToolRunner: ToolRunning {
 
 private final class StubPAMSnapshotReader: PAMSnapshotReading {
   private var snapshots: [PAMSnapshot]
+  private let error: (any Error)?
   private(set) var readCount = 0
 
   init(snapshot: PAMCondition) {
     snapshots = [snapshot.snapshot]
+    error = nil
   }
 
   init(snapshots: [PAMCondition]) {
     self.snapshots = snapshots.map(\.snapshot)
+    error = nil
+  }
+
+  init(error: any Error) {
+    snapshots = []
+    self.error = error
   }
 
   func read() throws -> PAMSnapshot {
     readCount += 1
+    if let error { throw error }
     guard !snapshots.isEmpty else { throw TestError.missingResult }
     if snapshots.count == 1 {
       return snapshots[0]

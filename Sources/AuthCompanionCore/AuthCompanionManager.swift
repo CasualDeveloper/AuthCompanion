@@ -70,7 +70,7 @@ public final class AuthCompanionManager {
     let pam = visiblePAMStatus(diagnostics: &diagnostics)
     let blocked =
       pinentry.condition == .unavailable || pinentry.condition == .conflict
-      || pam.condition == .conflict
+      || pam.condition == .conflict || pam.condition == .unavailable
     let sequence = [
       PlanStep(
         component: "pam-companion",
