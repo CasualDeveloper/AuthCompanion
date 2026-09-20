@@ -11,6 +11,11 @@ attestations, and verification of the exact archive.
 
 ## Prepare a candidate
 
+The next candidate is 0.2.0. Its accepted component combinations and rollout
+order are defined in [release compatibility](docs/release-compatibility.md).
+The source supports both generations through their common commands; it does
+not yet consume PAM's new inspection JSON or require mutation JSON.
+
 1. Update `AuthCompanionVersion.current` and `CHANGELOG.md` together.
 2. Run the full XCTest suite with Xcode and build the release product with
    Swiftly 6.3.3.

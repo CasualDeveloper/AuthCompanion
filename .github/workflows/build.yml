@@ -50,7 +50,7 @@ jobs:
       - name: Passive CLI smoke
         run: |
           binary="$(swift build -c release --show-bin-path)/authcompanion"
-          test "$($binary --version)" = "authcompanion 0.1.2"
+          test "$($binary --version)" = "authcompanion 0.2.0"
           "$binary" --help | grep -Fq 'authcompanion setup --yes'
 
   package:

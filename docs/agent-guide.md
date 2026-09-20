@@ -38,7 +38,9 @@ pinentry-companion --version
 pam-companion --version
 ```
 
-AuthCompanion currently accepts exactly pinentry 0.2.0 and PAM 0.1.1. Its
+Published AuthCompanion 0.1.2 accepts exactly pinentry 0.2.0 and PAM 0.1.1.
+The source candidate 0.2.0 accepts pinentry 0.2.0/0.2.1 and PAM 0.1.1/0.2.0;
+see [release compatibility](release-compatibility.md) before an upgrade. Its
 dependency lookup fails as a whole if either component is missing or unsupported.
 Inspect the available standalone component when that happens. Do not infer that
 both are absent, or run an untrusted binary found in a source checkout.

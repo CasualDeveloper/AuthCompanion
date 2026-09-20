@@ -327,7 +327,12 @@ final class SuiteManagerTests: XCTestCase {
     runner: RecordingToolRunner,
     snapshots: StubPAMSnapshotReader
   ) -> AuthCompanionManager {
-    AuthCompanionManager(paths: paths, runner: runner, pamSnapshots: snapshots)
+    AuthCompanionManager(
+      paths: paths,
+      versions: ComponentVersions(pinentryCompanion: "0.2.0", pamCompanion: "0.1.1"),
+      runner: runner,
+      pamSnapshots: snapshots
+    )
   }
 
   private func sudo(_ arguments: [String]) -> ToolInvocation {

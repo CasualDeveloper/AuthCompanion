@@ -3,6 +3,25 @@ import XCTest
 @testable import AuthCompanionCore
 
 final class PinentryContractTests: XCTestCase {
+  func testSupportedButUnexpectedVersionIsRejectedForEveryPinentryOperation() {
+    let status = ToolResult(exitStatus: 0, stdout: pinentryStatusJSON(), stderr: Data())
+    let plan = ToolResult(
+      exitStatus: 0, stdout: pinentryPlanJSON(changeRequired: false), stderr: Data())
+    let mutation = ToolResult(
+      exitStatus: 0,
+      stdout: pinentryMutationJSON(
+        operation: "setup", changed: true, transactionState: "committed",
+        safety: "exactRestoreStateRecorded"),
+      stderr: Data()
+    )
+
+    XCTAssertThrowsError(try PinentryContractDecoder.status(status, expectedVersion: "0.2.1"))
+    XCTAssertThrowsError(try PinentryContractDecoder.plan(plan, expectedVersion: "0.2.1"))
+    XCTAssertThrowsError(
+      try PinentryContractDecoder.mutation(mutation, operation: "setup", expectedVersion: "0.2.1")
+    )
+  }
+
   func testRejectsSuccessEnvelopeWithFailureExitStatus() {
     let result = ToolResult(
       exitStatus: 1,
@@ -10,7 +29,8 @@ final class PinentryContractTests: XCTestCase {
       stderr: Data()
     )
 
-    XCTAssertThrowsError(try PinentryContractDecoder.status(result)) { error in
+    XCTAssertThrowsError(try PinentryContractDecoder.status(result, expectedVersion: "0.2.0")) {
+      error in
       XCTAssertEqual(error as? PinentryContractError, .mismatchedExitStatus)
     }
   }
@@ -26,7 +46,8 @@ final class PinentryContractTests: XCTestCase {
       stderr: Data()
     )
 
-    XCTAssertThrowsError(try PinentryContractDecoder.status(result)) { error in
+    XCTAssertThrowsError(try PinentryContractDecoder.status(result, expectedVersion: "0.2.0")) {
+      error in
       XCTAssertEqual(error as? PinentryContractError, .invalidEnvelope)
     }
   }
@@ -44,7 +65,7 @@ final class PinentryContractTests: XCTestCase {
     )
 
     XCTAssertThrowsError(
-      try PinentryContractDecoder.mutation(result, operation: "setup")
+      try PinentryContractDecoder.mutation(result, operation: "setup", expectedVersion: "0.2.0")
     ) { error in
       XCTAssertEqual(error as? PinentryContractError, .invalidEnvelope)
     }
@@ -59,7 +80,8 @@ final class PinentryContractTests: XCTestCase {
       stderr: Data()
     )
 
-    XCTAssertThrowsError(try PinentryContractDecoder.plan(result)) { error in
+    XCTAssertThrowsError(try PinentryContractDecoder.plan(result, expectedVersion: "0.2.0")) {
+      error in
       XCTAssertEqual(error as? PinentryContractError, .invalidEnvelope)
     }
   }

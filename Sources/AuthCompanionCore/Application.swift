@@ -73,16 +73,16 @@ public final class AuthCompanionApplication {
     }
 
     let paths: ComponentPaths
+    let versions: ComponentVersions
     do {
       paths = try locator.locate()
-      try ComponentVersionVerifier.verify(paths: paths, runner: runner)
+      versions = try ComponentVersionVerifier.verify(paths: paths, runner: runner)
     } catch {
       return failure(
         command: command,
         code: "dependency.unavailable",
         message: String(describing: error),
-        remediation:
-          "Run `brew install casualdeveloper/tap/pinentry-companion casualdeveloper/tap/pam-companion`, then retry."
+        remediation: dependencyRemediation(error)
       )
     }
 
@@ -103,6 +103,7 @@ public final class AuthCompanionApplication {
 
     let manager = AuthCompanionManager(
       paths: paths,
+      versions: versions,
       runner: runner,
       pamSnapshots: pamSnapshots
     )
@@ -142,6 +143,14 @@ public final class AuthCompanionApplication {
     case .status, .plan, .help, .version:
       false
     }
+  }
+
+  private func dependencyRemediation(_ error: any Error) -> String {
+    if case DependencyError.unsupportedVersion = error {
+      return "Upgrade authcompanion to a release supporting the installed components, then retry."
+    }
+    return
+      "Run `brew install casualdeveloper/tap/pinentry-companion casualdeveloper/tap/pam-companion`, then retry."
   }
 
   private func authorizationRequired(command: AuthCommand) -> ApplicationOutput {

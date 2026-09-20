@@ -94,10 +94,32 @@ final class DependencyResolutionTests: XCTestCase {
         error as? DependencyError,
         .unsupportedVersion(
           component: "pinentry-companion",
-          expected: "0.2.0",
+          expected: "0.2.0 or 0.2.1",
           actual: "pinentry-companion 0.3.0"
         )
       )
+    }
+  }
+
+  func testVerifierAcceptsEverySupportedRollingUpgradePair() {
+    let paths = ComponentPaths(
+      pinentryExecutable: "/fixed/pinentry-companion",
+      pamExecutable: "/fixed/pam-companion",
+      sudoExecutable: "/usr/bin/sudo"
+    )
+    for pinentry in ["0.2.0", "0.2.1"] {
+      for pam in ["0.1.1", "0.2.0"] {
+        let runner = DependencyStubRunner(results: [
+          ToolResult(
+            exitStatus: 0, stdout: Data("pinentry-companion \(pinentry)\n".utf8), stderr: Data()),
+          ToolResult(
+            exitStatus: 0, stdout: Data("pam-companion \(pam)\n".utf8), stderr: Data()),
+        ])
+        XCTAssertNoThrow(
+          try ComponentVersionVerifier.verify(paths: paths, runner: runner),
+          "pinentry \(pinentry), PAM \(pam)"
+        )
+      }
     }
   }
 

@@ -33,15 +33,21 @@ tests and builds, not live GPG, Keychain, PAM, or authentication gates.
 
 Next implementation work:
 
-1. Give PAM setup/restore/uninstall machine results truthful effect and recovery
-   semantics, then assign its candidate version and package its schemas.
-2. Add PAM-owned public-policy observation if it can replace AuthCompanion's
-   duplicate parser without weakening the root-private journal boundary.
-3. Release a coordinator candidate that accepts the published components and
-   the candidate PAM contract during the rolling upgrade, then consume PAM's
-   owner-produced JSON.
-4. Run exact-artifact and mixed-version compatibility gates before publishing
-   components or allowing the tap to promote them.
+The [release compatibility decision](../release-compatibility.md) now defines
+the bounded 0.2.0 coordinator bridge. Source versions are reserved as pinentry
+0.2.1, PAM 0.2.0, and AuthCompanion 0.2.0. The bridge keeps the shared existing
+commands and explicitly accepts both old and candidate component versions;
+consuming PAM JSON is not a prerequisite for this compatibility change.
+
+1. Verify and promote the tap guard, then run the candidate artifact and
+   applicable live gates before publishing the coordinator-first bridge.
+2. Consume PAM's existing privileged inspection JSON in a separate coordinator
+   slice. Keep the published 0.1.1 command path while it remains supported.
+3. Give PAM mutation results truthful effect/recovery semantics and evaluate
+   whether PAM-owned public observation can replace the duplicate parser.
+
+The sections below retain the longer-term design options. Deferred discovery,
+expectation-token, and receipt work is not a release gate for this bridge.
 
 Deferred until a demonstrated need remains after those steps: mandatory
 `describe`, generalized next-action metadata, persisted receipts, expectation

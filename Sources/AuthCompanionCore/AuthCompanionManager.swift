@@ -2,15 +2,18 @@ import Foundation
 
 public final class AuthCompanionManager {
   private let paths: ComponentPaths
+  private let versions: ComponentVersions
   private let runner: any ToolRunning
   private let pamSnapshots: any PAMSnapshotReading
 
   public init(
     paths: ComponentPaths,
+    versions: ComponentVersions,
     runner: any ToolRunning,
     pamSnapshots: any PAMSnapshotReading
   ) {
     self.paths = paths
+    self.versions = versions
     self.runner = runner
     self.pamSnapshots = pamSnapshots
   }
@@ -20,7 +23,8 @@ public final class AuthCompanionManager {
     let pinentry: ComponentStatus
     do {
       let result = try runner.run(pinentryInvocation(["status", "--format", "json"]))
-      let contract = try PinentryContractDecoder.status(result)
+      let contract = try PinentryContractDecoder.status(
+        result, expectedVersion: versions.pinentryCompanion)
       pinentry = pinentryStatus(contract)
       diagnostics += contract.diagnostics
     } catch {
@@ -53,7 +57,8 @@ public final class AuthCompanionManager {
     var pinentryChangeRequired = false
     do {
       let result = try runner.run(pinentryInvocation(["plan", "--format", "json"]))
-      let contract = try PinentryContractDecoder.plan(result)
+      let contract = try PinentryContractDecoder.plan(
+        result, expectedVersion: versions.pinentryCompanion)
       pinentryChangeRequired = contract.state.changeRequired
       pinentry = ComponentStatus(
         component: "pinentry-companion",
@@ -110,7 +115,8 @@ public final class AuthCompanionManager {
     let plan: PinentryPlanContract
     do {
       plan = try PinentryContractDecoder.plan(
-        runner.run(pinentryInvocation(["plan", "--format", "json"]))
+        runner.run(pinentryInvocation(["plan", "--format", "json"])),
+        expectedVersion: versions.pinentryCompanion
       )
       let onlyTakeoverConflict =
         !plan.state.conflicts.isEmpty
@@ -168,7 +174,8 @@ public final class AuthCompanionManager {
     do {
       pinentryMutation = try PinentryContractDecoder.mutation(
         runner.run(pinentryInvocation(setupArguments)),
-        operation: "setup"
+        operation: "setup",
+        expectedVersion: versions.pinentryCompanion
       )
       guard pinentryMutation.outcome == .ok else {
         return mutationFailure(
@@ -306,7 +313,8 @@ public final class AuthCompanionManager {
     do {
       let pinentry = try PinentryContractDecoder.mutation(
         runner.run(pinentryInvocation(["restore", "--yes", "--format", "json"])),
-        operation: "restore"
+        operation: "restore",
+        expectedVersion: versions.pinentryCompanion
       )
       guard pinentry.outcome == .ok else {
         return mutationFailure(
@@ -353,7 +361,7 @@ public final class AuthCompanionManager {
         result.exitStatus == 0
         ? ComponentStatus(
           component: "pinentry-companion",
-          version: PinentryContractDecoder.supportedVersion,
+          version: versions.pinentryCompanion,
           condition: .healthy,
           verification: "componentDoctor"
         )
@@ -373,7 +381,7 @@ public final class AuthCompanionManager {
         result.exitStatus == 0
         ? ComponentStatus(
           component: "pam-companion",
-          version: SupportedComponentVersions.pamCompanion,
+          version: versions.pamCompanion,
           condition: .healthy,
           verification: "componentDoctor"
         )
@@ -430,7 +438,7 @@ public final class AuthCompanionManager {
       let condition = try PAMInspector.inspect(pamSnapshots.read())
       return ComponentStatus(
         component: "pam-companion",
-        version: condition == .configured ? SupportedComponentVersions.pamCompanion : nil,
+        version: versions.pamCompanion,
         condition: componentCondition(condition),
         verification: "visibleFilesystem"
       )
@@ -443,7 +451,7 @@ public final class AuthCompanionManager {
   private func restoredPAMStatus() -> ComponentStatus {
     ComponentStatus(
       component: "pam-companion",
-      version: SupportedComponentVersions.pamCompanion,
+      version: versions.pamCompanion,
       condition: .restored,
       verification: "componentLifecycle"
     )

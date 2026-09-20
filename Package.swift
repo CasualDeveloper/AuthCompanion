@@ -17,7 +17,8 @@ let package = Package(
     ),
     .testTarget(
       name: "AuthCompanionTests",
-      dependencies: ["AuthCompanionCore"]
+      dependencies: ["AuthCompanionCore"],
+      resources: [.copy("Fixtures")]
     ),
   ],
   swiftLanguageModes: [.v6]

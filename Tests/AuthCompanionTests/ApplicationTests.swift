@@ -14,7 +14,7 @@ final class ApplicationTests: XCTestCase {
 
     XCTAssertEqual(help.exitStatus, 0)
     XCTAssertTrue(help.stdout.contains("Usage:"))
-    XCTAssertEqual(version.stdout, "authcompanion 0.1.2\n")
+    XCTAssertEqual(version.stdout, "authcompanion 0.2.0\n")
     XCTAssertEqual(locator.locateCount, 0)
     XCTAssertTrue(runner.invocations.isEmpty)
   }
@@ -93,6 +93,148 @@ final class ApplicationTests: XCTestCase {
     XCTAssertTrue(output.stderr.contains("brew install"))
     XCTAssertTrue(output.stderr.contains("pinentry-companion"))
     XCTAssertTrue(output.stderr.contains("pam-companion"))
+  }
+
+  func testRollingUpgradeStatusPreservesObservedComponentVersions() throws {
+    for pinentry in ["0.2.0", "0.2.1"] {
+      for pam in ["0.1.1", "0.2.0"] {
+        let response = pinentryStatusJSONText.replacingOccurrences(
+          of: "\"componentVersion\":\"0.2.0\"",
+          with: "\"componentVersion\":\"\(pinentry)\""
+        )
+        let runner = ApplicationRunner(results: [
+          ToolResult(
+            exitStatus: 0, stdout: Data("pinentry-companion \(pinentry)\n".utf8), stderr: Data()),
+          ToolResult(
+            exitStatus: 0, stdout: Data("pam-companion \(pam)\n".utf8), stderr: Data()),
+          ToolResult(exitStatus: 0, stdout: Data(response.utf8), stderr: Data()),
+        ])
+        let application = makeApplication(
+          effectiveUserID: 501, locator: ApplicationLocator(paths: fixedPaths()), runner: runner)
+
+        let output = application.run(["authcompanion", "status", "--format", "json"])
+
+        XCTAssertEqual(output.exitStatus, 0, "pinentry \(pinentry), PAM \(pam)")
+        guard output.exitStatus == 0 else { continue }
+        let envelope = try JSONDecoder().decode(
+          AuthEnvelope<StatusState>.self, from: Data(output.stdout.utf8))
+        XCTAssertEqual(envelope.state.pinentry.version, pinentry)
+        XCTAssertEqual(envelope.state.pam.version, pam)
+        XCTAssertEqual(runner.invocations.count, 3)
+        XCTAssertFalse(runner.invocations.contains { $0.executable == "/usr/bin/sudo" })
+      }
+    }
+  }
+
+  func testRollingUpgradeLifecycleUsesTheCommonPAMCommandSurface() throws {
+    for pinentry in ["0.2.0", "0.2.1"] {
+      for pam in ["0.1.1", "0.2.0"] {
+        let prefix = [
+          ToolResult(
+            exitStatus: 0, stdout: Data("pinentry-companion \(pinentry)\n".utf8), stderr: Data()),
+          ToolResult(
+            exitStatus: 0, stdout: Data("pam-companion \(pam)\n".utf8), stderr: Data()),
+          ToolResult(exitStatus: 0, stdout: Data(), stderr: Data()),
+        ]
+        let success = ToolResult(exitStatus: 0, stdout: Data(), stderr: Data())
+        func response(_ data: Data) -> ToolResult {
+          ToolResult(
+            exitStatus: 0,
+            stdout: Data(
+              String(decoding: data, as: UTF8.self).replacingOccurrences(
+                of: "\"componentVersion\":\"0.2.0\"",
+                with: "\"componentVersion\":\"\(pinentry)\""
+              ).utf8),
+            stderr: Data()
+          )
+        }
+        let operations: [(arguments: [String], results: [ToolResult], pamCommands: [[String]])] = [
+          (
+            ["setup", "--yes", "--format", "json"],
+            [
+              response(pinentryPlanJSON(changeRequired: true)), success,
+              response(
+                pinentryMutationJSON(
+                  operation: "setup", changed: true, transactionState: "committed",
+                  safety: "exactRestoreStateRecorded")),
+              success, success,
+            ],
+            [["setup", "--dry-run"], ["setup"], ["doctor"]]
+          ),
+          (
+            ["restore", "--yes", "--format", "json"],
+            [
+              success, success,
+              response(
+                pinentryMutationJSON(
+                  operation: "restore", changed: true, transactionState: "restored",
+                  safety: "compareAndSwapVerified")),
+            ],
+            [["restore", "--dry-run"], ["restore"]]
+          ),
+          (["doctor", "--format", "json"], [success, success], [["doctor"]]),
+        ]
+        for operation in operations {
+          let runner = ApplicationRunner(results: prefix + operation.results)
+          let application = makeApplication(
+            effectiveUserID: 501, locator: ApplicationLocator(paths: fixedPaths()), runner: runner)
+
+          let output = application.run(["authcompanion"] + operation.arguments)
+
+          XCTAssertEqual(output.exitStatus, 0, "\(pinentry), \(pam): \(operation.arguments)")
+          let envelope =
+            try JSONSerialization.jsonObject(with: Data(output.stdout.utf8))
+            as? [String: Any]
+          let state = try XCTUnwrap(envelope?["state"] as? [String: Any])
+          XCTAssertEqual((state["pinentry"] as? [String: Any])?["version"] as? String, pinentry)
+          XCTAssertEqual((state["pam"] as? [String: Any])?["version"] as? String, pam)
+          let pamInvocations = runner.invocations.filter {
+            $0.executable == "/usr/bin/sudo" && $0.arguments.contains("/fixed/pam-companion")
+          }
+          XCTAssertEqual(
+            pamInvocations.map(\.arguments),
+            operation.pamCommands.map { ["-n", "--", "/fixed/pam-companion"] + $0 }
+          )
+        }
+      }
+    }
+  }
+
+  func testUnknownComponentVersionStopsBeforePrivilegeOrLifecycleWork() {
+    let runner = ApplicationRunner(results: [
+      ToolResult(
+        exitStatus: 0, stdout: Data("pinentry-companion 0.2.2\n".utf8), stderr: Data())
+    ])
+    let application = makeApplication(
+      effectiveUserID: 501, locator: ApplicationLocator(paths: fixedPaths()), runner: runner)
+
+    let output = application.run(["authcompanion", "setup", "--yes", "--format", "json"])
+
+    XCTAssertEqual(output.exitStatus, 1)
+    XCTAssertEqual(runner.invocations.count, 1)
+    XCTAssertTrue(output.stdout.contains("unsupported pinentry-companion version"))
+    XCTAssertTrue(output.stdout.contains("Upgrade authcompanion"))
+  }
+
+  func testVersionChangeBetweenProbeAndPlanStopsBeforeMutation() {
+    let changedVersion = String(decoding: pinentryPlanJSON(changeRequired: true), as: UTF8.self)
+      .replacingOccurrences(
+        of: "\"componentVersion\":\"0.2.0\"",
+        with: "\"componentVersion\":\"0.2.1\"")
+    let runner = ApplicationRunner(
+      results: versionResults() + [
+        ToolResult(exitStatus: 0, stdout: Data(), stderr: Data()),
+        ToolResult(exitStatus: 0, stdout: Data(changedVersion.utf8), stderr: Data()),
+      ])
+    let application = makeApplication(
+      effectiveUserID: 501, locator: ApplicationLocator(paths: fixedPaths()), runner: runner)
+
+    let output = application.run(["authcompanion", "setup", "--yes", "--format", "json"])
+
+    XCTAssertEqual(output.exitStatus, 1)
+    XCTAssertEqual(runner.invocations.count, 4)
+    XCTAssertFalse(runner.invocations.contains { $0.arguments.contains("setup") })
+    XCTAssertTrue(output.stdout.contains("pinentry-companion.unavailable"))
   }
 
   func testPrivilegedCommandsRequireSudoAuthorizationBeforeManagerWork() {

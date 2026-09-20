@@ -96,27 +96,33 @@ public struct HomebrewComponentLocator: ComponentLocating {
 }
 
 public enum ComponentVersionVerifier {
-  public static func verify(paths: ComponentPaths, runner: any ToolRunning) throws {
-    try verify(
-      component: "pinentry-companion",
-      expectedVersion: SupportedComponentVersions.pinentryCompanion,
-      executable: paths.pinentryExecutable,
-      runner: runner
-    )
-    try verify(
-      component: "pam-companion",
-      expectedVersion: SupportedComponentVersions.pamCompanion,
-      executable: paths.pamExecutable,
-      runner: runner
+  @discardableResult
+  public static func verify(
+    paths: ComponentPaths,
+    runner: any ToolRunning
+  ) throws -> ComponentVersions {
+    try ComponentVersions(
+      pinentryCompanion: verify(
+        component: "pinentry-companion",
+        supportedVersions: SupportedComponentVersions.pinentryCompanion,
+        executable: paths.pinentryExecutable,
+        runner: runner
+      ),
+      pamCompanion: verify(
+        component: "pam-companion",
+        supportedVersions: SupportedComponentVersions.pamCompanion,
+        executable: paths.pamExecutable,
+        runner: runner
+      )
     )
   }
 
   private static func verify(
     component: String,
-    expectedVersion: String,
+    supportedVersions: [String],
     executable: String,
     runner: any ToolRunning
-  ) throws {
+  ) throws -> String {
     let result = try runner.run(ToolInvocation(executable: executable, arguments: ["--version"]))
     guard result.exitStatus == 0,
       let output = String(data: result.stdout, encoding: .utf8)
@@ -124,13 +130,13 @@ public enum ComponentVersionVerifier {
       throw DependencyError.versionCheckFailed(component)
     }
     let actual = output.trimmingCharacters(in: .whitespacesAndNewlines)
-    let expected = "\(component) \(expectedVersion)"
-    guard actual == expected else {
+    guard let version = supportedVersions.first(where: { actual == "\(component) \($0)" }) else {
       throw DependencyError.unsupportedVersion(
         component: component,
-        expected: expectedVersion,
+        expected: supportedVersions.joined(separator: " or "),
         actual: actual
       )
     }
+    return version
   }
 }

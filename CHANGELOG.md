@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.0 - Unreleased
+
+### Changed
+
+- Accept pinentry-companion 0.2.0/0.2.1 and pam-companion 0.1.1/0.2.0 as an
+  explicit rolling-upgrade set, validating each pinentry response against its
+  observed executable version.
+- Report observed component versions and preserve partial setup results instead
+  of invoking enrollment restore as automatic per-operation compensation.
+- Execute validated stable Homebrew opt paths and reject plans when PAM
+  inspection is unavailable.
+- Bound child execution and output, with private capture of both streams.
+
+### Verification
+
+- Cover all four component combinations and copied producer fixtures in the
+  coordinator tests. Exact release-artifact and live gates remain required
+  before publication.
+
 ## 0.1.2 - 2026-07-21
 
 ### Fixed

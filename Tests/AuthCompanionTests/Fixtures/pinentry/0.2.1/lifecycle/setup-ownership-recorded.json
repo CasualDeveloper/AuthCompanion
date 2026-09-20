@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "component": "pinentry-companion",
+  "componentVersion": "0.2.1",
+  "operation": "setup",
+  "outcome": "ok",
+  "changed": true,
+  "diagnostics": [
+    {
+      "code": "lifecycle.setup.ownershipRecorded",
+      "severity": "info",
+      "message": "Lifecycle ownership was recorded without changing GPG configuration."
+    }
+  ],
+  "state": {
+    "transactionState": "committed",
+    "safety": "exactRestoreStateRecorded"
+  }
+}

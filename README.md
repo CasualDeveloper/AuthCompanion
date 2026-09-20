@@ -8,7 +8,7 @@ command:
 - [`pam-companion`](https://github.com/CasualDeveloper/pam-companion) approves
   `sudo` with Touch ID or Apple Watch.
 
-AuthCompanion 0.1 is a Swift command-line tool. It coordinates the two released
+AuthCompanion is a Swift command-line tool. It coordinates the two standalone
 components but does not duplicate their authentication or configuration code.
 
 ## Install and set up
@@ -98,7 +98,7 @@ invalid.
 
 AuthCompanion resolves only the fixed Homebrew `opt` locations for the two
 formulas, verifies that they resolve inside their respective Cellars, and
-requires the supported component versions. It never searches `PATH`, accepts
+requires the explicitly supported component versions. It never searches `PATH`, accepts
 an executable override, or builds a shell command.
 
 ## Using the system from an agent
@@ -116,8 +116,8 @@ in those documents are not features of the current release.
 ## Requirements and build
 
 - macOS 14 or newer
-- `pinentry-companion` 0.2.0
-- `pam-companion` 0.1.1
+- `pinentry-companion` 0.2.0 or 0.2.1
+- `pam-companion` 0.1.1 or 0.2.0
 - Swift 6.3.3 for release archives
 - macOS Command Line Tools for builds and packaging
 - Xcode, or another toolchain containing XCTest, only for the test suite
@@ -145,10 +145,15 @@ Create and verify a local candidate without changing authentication state:
 
 ```sh
 swiftly run ./Scripts/package-release.sh --allow-dirty
-./Scripts/verify-release.sh dist/authcompanion-0.1.2.tar.gz
+./Scripts/verify-release.sh dist/authcompanion-0.2.0.tar.gz
 ```
 
 See [RELEASING.md](RELEASING.md) for the release and single live setup gate.
+
+Source is prepared for the 0.2.0 bridge release. See
+[release compatibility](docs/release-compatibility.md) for its four supported
+old/new component combinations and coordinator-first publication order.
+Preparing a source version does not publish or install that release.
 
 ## How it was built
 

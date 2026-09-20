@@ -12,6 +12,12 @@ Use the [current agent guide](agent-guide.md) to operate existing releases, the
 [machine contract design](agent-contract.md) for future interfaces, and the
 [implementation plan](plans/2026-09-16-agent-operability.md) for delivery order.
 
+The current 0.2.0 bridge is narrower than the prospective control interface:
+it uses the shared existing commands with exact version allowlists and observed
+version checks. [Release compatibility](release-compatibility.md) defines that
+implementation and rollout; discovery, receipts, and state tokens remain
+deferred.
+
 ## One system, clear owners
 
 ```mermaid

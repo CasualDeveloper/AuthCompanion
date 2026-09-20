@@ -78,30 +78,34 @@ struct PinentryMutationContract: Decodable {
 }
 
 enum PinentryContractDecoder {
-  static let supportedVersion = SupportedComponentVersions.pinentryCompanion
-
-  static func status(_ result: ToolResult) throws -> PinentryStatusContract {
+  static func status(
+    _ result: ToolResult, expectedVersion: String
+  ) throws -> PinentryStatusContract {
     let envelope = try JSONDecoder().decode(PinentryStatusContract.self, from: result.stdout)
     try validateHeader(
       schemaVersion: envelope.schemaVersion,
       component: envelope.component,
       version: envelope.componentVersion,
       operation: envelope.operation,
-      expectedOperation: "status"
+      expectedOperation: "status",
+      expectedVersion: expectedVersion
     )
     try validateExit(outcome: envelope.outcome, exitStatus: result.exitStatus)
     guard !envelope.changed else { throw PinentryContractError.invalidEnvelope }
     return envelope
   }
 
-  static func plan(_ result: ToolResult) throws -> PinentryPlanContract {
+  static func plan(
+    _ result: ToolResult, expectedVersion: String
+  ) throws -> PinentryPlanContract {
     let envelope = try JSONDecoder().decode(PinentryPlanContract.self, from: result.stdout)
     try validateHeader(
       schemaVersion: envelope.schemaVersion,
       component: envelope.component,
       version: envelope.componentVersion,
       operation: envelope.operation,
-      expectedOperation: "plan"
+      expectedOperation: "plan",
+      expectedVersion: expectedVersion
     )
     try validateExit(outcome: envelope.outcome, exitStatus: result.exitStatus)
     guard validPlanState(envelope) else { throw PinentryContractError.invalidEnvelope }
@@ -110,7 +114,8 @@ enum PinentryContractDecoder {
 
   static func mutation(
     _ result: ToolResult,
-    operation: String
+    operation: String,
+    expectedVersion: String
   ) throws -> PinentryMutationContract {
     let envelope = try JSONDecoder().decode(PinentryMutationContract.self, from: result.stdout)
     try validateHeader(
@@ -118,7 +123,8 @@ enum PinentryContractDecoder {
       component: envelope.component,
       version: envelope.componentVersion,
       operation: envelope.operation,
-      expectedOperation: operation
+      expectedOperation: operation,
+      expectedVersion: expectedVersion
     )
     try validateExit(outcome: envelope.outcome, exitStatus: result.exitStatus)
     guard validMutationState(envelope) else { throw PinentryContractError.invalidEnvelope }
@@ -130,11 +136,13 @@ enum PinentryContractDecoder {
     component: String,
     version: String,
     operation: String,
-    expectedOperation: String
+    expectedOperation: String,
+    expectedVersion: String
   ) throws {
     guard schemaVersion == 1,
       component == "pinentry-companion",
-      version == supportedVersion,
+      SupportedComponentVersions.pinentryCompanion.contains(expectedVersion),
+      version == expectedVersion,
       operation == expectedOperation
     else {
       throw PinentryContractError.invalidEnvelope
