@@ -152,7 +152,7 @@ final class SuiteManagerTests: XCTestCase {
     XCTAssertEqual(runner.invocations.count, 2)
   }
 
-  func testSetupRestoresPAMAndPinentryWhenPAMApplyFails() {
+  func testSetupPreservesPartialStateWhenPAMApplyFails() {
     let runner = RecordingToolRunner(results: [
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
       .success(),
@@ -164,14 +164,6 @@ final class SuiteManagerTests: XCTestCase {
           safety: "exactRestoreStateRecorded"
         )),
       ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("PAM setup failed\n".utf8)),
-      .success(),
-      .success(
-        stdout: pinentryMutationJSON(
-          operation: "restore",
-          changed: true,
-          transactionState: "restored",
-          safety: "compareAndSwapVerified"
-        )),
     ])
     let manager = makeManager(
       runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .notConfigured))
@@ -180,54 +172,42 @@ final class SuiteManagerTests: XCTestCase {
 
     XCTAssertEqual(result.exitStatus, 1)
     XCTAssertEqual(result.envelope.outcome, .error)
-    XCTAssertEqual(result.envelope.state.recovery, .rolledBack)
-    XCTAssertEqual(
-      Array(runner.invocations.suffix(2)),
-      [
-        sudo([paths.pamExecutable, "restore"]),
-        ToolInvocation(
-          executable: paths.pinentryExecutable,
-          arguments: ["restore", "--yes", "--format", "json"]
-        ),
-      ]
-    )
+    XCTAssertEqual(result.envelope.state.recovery, .manualRequired)
+    XCTAssertEqual(result.envelope.state.pinentry.condition, .configured)
+    XCTAssertEqual(result.envelope.state.pam.condition, .unavailable)
+    XCTAssertEqual(result.envelope.diagnostics.last?.code, "suite.setup.partialState")
+    XCTAssertEqual(runner.invocations.count, 4)
+    XCTAssertFalse(runner.invocations.contains { $0.arguments.contains("restore") })
   }
 
-  func testSetupReportsManualRecoveryWhenCompensationFails() {
-    let runner = RecordingToolRunner(results: [
-      .success(stdout: pinentryPlanJSON(changeRequired: true)),
-      .success(),
-      .success(
-        stdout: pinentryMutationJSON(
-          operation: "setup",
-          changed: true,
-          transactionState: "committed",
-          safety: "exactRestoreStateRecorded"
-        )),
-      ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("PAM setup failed\n".utf8)),
-      .success(),
-      ToolResult(
-        exitStatus: 1,
-        stdout: pinentryMutationJSON(
-          operation: "restore",
-          outcome: "conflict",
-          changed: false,
-          transactionState: "notCommitted",
-          safety: "noMutationCommitted"
-        ),
-        stderr: Data()
-      ),
-    ])
+  func testSetupTreatsAThrownPAMInvocationAsUnknownPartialState() {
+    let runner = RecordingToolRunner(
+      results: [
+        .success(stdout: pinentryPlanJSON(changeRequired: true)),
+        .success(),
+        .success(
+          stdout: pinentryMutationJSON(
+            operation: "setup",
+            changed: true,
+            transactionState: "committed",
+            safety: "exactRestoreStateRecorded"
+          )),
+      ],
+      failureAtInvocation: 4
+    )
     let manager = makeManager(
       runner: runner, snapshots: StubPAMSnapshotReader(snapshot: .notConfigured))
 
     let result = manager.setup(takeOver: false)
 
     XCTAssertEqual(result.envelope.state.recovery, .manualRequired)
-    XCTAssertEqual(result.envelope.outcome, .error)
+    XCTAssertEqual(result.envelope.state.pinentry.condition, .configured)
+    XCTAssertEqual(result.envelope.state.pam.condition, .unavailable)
+    XCTAssertEqual(runner.invocations.count, 4)
+    XCTAssertFalse(runner.invocations.contains { $0.arguments.contains("restore") })
   }
 
-  func testSetupRestoresPAMThenPinentryWhenDoctorFailsAfterPAMCommit() {
+  func testSetupPreservesPartialStateWhenPAMDoctorFailsAfterCommit() {
     let runner = RecordingToolRunner(results: [
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
       .success(),
@@ -240,55 +220,6 @@ final class SuiteManagerTests: XCTestCase {
         )),
       .success(),
       ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("PAM doctor failed\n".utf8)),
-      .success(),
-      .success(
-        stdout: pinentryMutationJSON(
-          operation: "restore",
-          changed: true,
-          transactionState: "restored",
-          safety: "compareAndSwapVerified"
-        )),
-    ])
-    let manager = makeManager(
-      runner: runner,
-      snapshots: StubPAMSnapshotReader(snapshot: .notConfigured)
-    )
-
-    let result = manager.setup(takeOver: false)
-
-    XCTAssertEqual(result.envelope.state.recovery, .rolledBack)
-    XCTAssertEqual(
-      Array(runner.invocations.suffix(2)),
-      [
-        sudo([paths.pamExecutable, "restore"]),
-        ToolInvocation(
-          executable: paths.pinentryExecutable,
-          arguments: ["restore", "--yes", "--format", "json"]
-        ),
-      ])
-  }
-
-  func testSetupReportsManualRecoveryWhenPAMRollbackFailsButStillRestoresPinentry() {
-    let runner = RecordingToolRunner(results: [
-      .success(stdout: pinentryPlanJSON(changeRequired: true)),
-      .success(),
-      .success(
-        stdout: pinentryMutationJSON(
-          operation: "setup",
-          changed: true,
-          transactionState: "committed",
-          safety: "exactRestoreStateRecorded"
-        )),
-      .success(),
-      ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("PAM doctor failed\n".utf8)),
-      ToolResult(exitStatus: 1, stdout: Data(), stderr: Data("PAM restore failed\n".utf8)),
-      .success(
-        stdout: pinentryMutationJSON(
-          operation: "restore",
-          changed: true,
-          transactionState: "restored",
-          safety: "compareAndSwapVerified"
-        )),
     ])
     let manager = makeManager(
       runner: runner,
@@ -298,18 +229,14 @@ final class SuiteManagerTests: XCTestCase {
     let result = manager.setup(takeOver: false)
 
     XCTAssertEqual(result.envelope.state.recovery, .manualRequired)
-    XCTAssertEqual(
-      Array(runner.invocations.suffix(2)),
-      [
-        sudo([paths.pamExecutable, "restore"]),
-        ToolInvocation(
-          executable: paths.pinentryExecutable,
-          arguments: ["restore", "--yes", "--format", "json"]
-        ),
-      ])
+    XCTAssertEqual(result.envelope.state.pinentry.condition, .configured)
+    XCTAssertEqual(result.envelope.state.pam.condition, .unavailable)
+    XCTAssertEqual(result.envelope.diagnostics.last?.code, "suite.setup.partialState")
+    XCTAssertEqual(runner.invocations.count, 5)
+    XCTAssertFalse(runner.invocations.contains { $0.arguments.contains("restore") })
   }
 
-  func testSetupRollsBackBothComponentsWhenVisiblePAMPostconditionFails() {
+  func testSetupPreservesObservedPartialStateWhenVisiblePAMPostconditionFails() {
     let runner = RecordingToolRunner(results: [
       .success(stdout: pinentryPlanJSON(changeRequired: true)),
       .success(),
@@ -322,14 +249,6 @@ final class SuiteManagerTests: XCTestCase {
         )),
       .success(),
       .success(),
-      .success(),
-      .success(
-        stdout: pinentryMutationJSON(
-          operation: "restore",
-          changed: true,
-          transactionState: "restored",
-          safety: "compareAndSwapVerified"
-        )),
     ])
     let manager = makeManager(
       runner: runner,
@@ -338,17 +257,13 @@ final class SuiteManagerTests: XCTestCase {
 
     let result = manager.setup(takeOver: false)
 
-    XCTAssertEqual(result.envelope.state.recovery, .rolledBack)
+    XCTAssertEqual(result.envelope.state.recovery, .manualRequired)
+    XCTAssertEqual(result.envelope.state.pinentry.condition, .configured)
+    XCTAssertEqual(result.envelope.state.pam.condition, .notConfigured)
     XCTAssertEqual(result.envelope.diagnostics.first?.code, "pam.setup.postconditionFailed")
-    XCTAssertEqual(
-      Array(runner.invocations.suffix(2)),
-      [
-        sudo([paths.pamExecutable, "restore"]),
-        ToolInvocation(
-          executable: paths.pinentryExecutable,
-          arguments: ["restore", "--yes", "--format", "json"]
-        ),
-      ])
+    XCTAssertEqual(result.envelope.diagnostics.last?.code, "suite.setup.partialState")
+    XCTAssertEqual(runner.invocations.count, 5)
+    XCTAssertFalse(runner.invocations.contains { $0.arguments.contains("restore") })
   }
 
   func testRestoreStopsBeforePinentryWhenPAMRestoreFails() {
@@ -422,14 +337,17 @@ final class SuiteManagerTests: XCTestCase {
 
 private final class RecordingToolRunner: ToolRunning {
   private var results: [ToolResult]
+  private let failureAtInvocation: Int?
   private(set) var invocations: [ToolInvocation] = []
 
-  init(results: [ToolResult]) {
+  init(results: [ToolResult], failureAtInvocation: Int? = nil) {
     self.results = results
+    self.failureAtInvocation = failureAtInvocation
   }
 
   func run(_ invocation: ToolInvocation) throws -> ToolResult {
     invocations.append(invocation)
+    if invocations.count == failureAtInvocation { throw TestError.missingResult }
     guard !results.isEmpty else { throw TestError.missingResult }
     return results.removeFirst()
   }

@@ -197,19 +197,17 @@ public final class AuthCompanionManager {
     do {
       pamSetup = try runner.run(sudoInvocation([paths.pamExecutable, "setup"]))
     } catch {
-      return rollbackSetup(
+      return partialSetupFailure(
         after: pinentryMutation,
-        pamWasApplied: false,
-        primaryDiagnostic: componentFailure("pam-companion", error: error),
-        originalPAM: originalPAM
+        diagnostic: componentFailure("pam-companion", error: error),
+        pam: unavailable(component: "pam-companion")
       )
     }
     guard pamSetup.exitStatus == 0 else {
-      return rollbackSetup(
+      return partialSetupFailure(
         after: pinentryMutation,
-        pamWasApplied: true,
-        primaryDiagnostic: toolFailure("pam.setup.failed", result: pamSetup),
-        originalPAM: originalPAM
+        diagnostic: toolFailure("pam.setup.failed", result: pamSetup),
+        pam: unavailable(component: "pam-companion")
       )
     }
 
@@ -217,33 +215,30 @@ public final class AuthCompanionManager {
     do {
       doctor = try runner.run(sudoInvocation([paths.pamExecutable, "doctor"]))
     } catch {
-      return rollbackSetup(
+      return partialSetupFailure(
         after: pinentryMutation,
-        pamWasApplied: true,
-        primaryDiagnostic: componentFailure("pam-companion", error: error),
-        originalPAM: originalPAM
+        diagnostic: componentFailure("pam-companion", error: error),
+        pam: unavailable(component: "pam-companion")
       )
     }
     guard doctor.exitStatus == 0 else {
-      return rollbackSetup(
+      return partialSetupFailure(
         after: pinentryMutation,
-        pamWasApplied: true,
-        primaryDiagnostic: toolFailure("pam.doctor.failed", result: doctor),
-        originalPAM: originalPAM
+        diagnostic: toolFailure("pam.doctor.failed", result: doctor),
+        pam: unavailable(component: "pam-companion")
       )
     }
 
     let configuredPAM = visiblePAMStatus(diagnostics: &diagnostics)
     guard configuredPAM.condition == .configured else {
-      return rollbackSetup(
+      return partialSetupFailure(
         after: pinentryMutation,
-        pamWasApplied: true,
-        primaryDiagnostic: SuiteDiagnostic(
+        diagnostic: SuiteDiagnostic(
           code: "pam.setup.postconditionFailed",
           severity: .error,
           message: "Visible PAM state did not match the configured postcondition."
         ),
-        originalPAM: originalPAM
+        pam: configuredPAM
       )
     }
 
@@ -401,66 +396,30 @@ public final class AuthCompanionManager {
     )
   }
 
-  private func rollbackSetup(
+  private func partialSetupFailure(
     after mutation: PinentryMutationContract,
-    pamWasApplied: Bool,
-    primaryDiagnostic: SuiteDiagnostic,
-    originalPAM: ComponentStatus
+    diagnostic: SuiteDiagnostic,
+    pam: ComponentStatus
   ) -> AuthCommandResult<MutationState> {
-    var diagnostics = [primaryDiagnostic]
-    var pamRecovered = !pamWasApplied
-    if pamWasApplied {
-      do {
-        let restore = try runner.run(sudoInvocation([paths.pamExecutable, "restore"]))
-        pamRecovered = restore.exitStatus == 0
-        if !pamRecovered {
-          diagnostics.append(toolFailure("pam.rollback.failed", result: restore))
-        }
-      } catch {
-        diagnostics.append(componentFailure("pam-companion.rollback", error: error))
-      }
-    }
-
-    var pinentry = component(from: mutation)
-    var pinentryRecovered = !mutation.changed
-    if mutation.changed {
-      do {
-        let restore = try PinentryContractDecoder.mutation(
-          runner.run(pinentryInvocation(["restore", "--yes", "--format", "json"])),
-          operation: "restore"
-        )
-        pinentry = component(from: restore)
-        pinentryRecovered = restore.outcome == .ok
-        diagnostics += restore.diagnostics
-        if !pinentryRecovered {
-          diagnostics.append(
-            SuiteDiagnostic(
-              code: "pinentry.rollback.failed",
-              severity: .error,
-              message: "pinentry-companion could not restore its pre-setup state.",
-              remediation: "Run pinentry-companion restore --yes --format json."
-            ))
-        }
-      } catch {
-        pinentry = unavailable(component: "pinentry-companion")
-        diagnostics.append(componentFailure("pinentry-companion.rollback", error: error))
-      }
-    }
-
-    let rollbackAttempted = pamWasApplied || mutation.changed
-    let recovery: RecoveryState =
-      pamRecovered && pinentryRecovered
-      ? (rollbackAttempted ? .rolledBack : .notNeeded)
-      : .manualRequired
     return result(
       operation: "setup",
       outcome: .error,
-      changed: recovery == .manualRequired,
-      diagnostics: diagnostics,
+      changed: true,
+      diagnostics: [
+        diagnostic,
+        SuiteDiagnostic(
+          code: "suite.setup.partialState",
+          severity: .error,
+          message:
+            "Setup stopped after pinentry-companion completed; no component was automatically restored.",
+          remediation:
+            "Inspect AuthCompanion status and doctor before deciding whether to retry or restore."
+        ),
+      ],
       state: MutationState(
-        pinentry: pinentry,
-        pam: pamRecovered ? originalPAM : unavailable(component: "pam-companion"),
-        recovery: recovery
+        pinentry: component(from: mutation),
+        pam: pam,
+        recovery: .manualRequired
       ),
       exitStatus: 1
     )
