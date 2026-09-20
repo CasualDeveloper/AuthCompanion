@@ -78,7 +78,7 @@ public struct HomebrewComponentLocator: ComponentLocating {
     else {
       throw LocatorError.invalid(formula)
     }
-    return resolved.path
+    return optExecutable.standardizedFileURL.path
   }
 
   private enum LocatorError: Error {

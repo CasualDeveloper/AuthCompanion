@@ -17,14 +17,20 @@ final class DependencyResolutionTests: XCTestCase {
   }
 
   func testResolvesOnlyExecutablesInsideFormulaCellars() throws {
-    let pinentry = try installFormula(name: "pinentry-companion", version: "0.2.0")
-    let pam = try installFormula(name: "pam-companion", version: "0.1.1")
+    _ = try installFormula(name: "pinentry-companion", version: "0.2.0")
+    _ = try installFormula(name: "pam-companion", version: "0.1.1")
     let locator = HomebrewComponentLocator(prefixes: [fixtureURL.path])
 
     let paths = try locator.locate()
 
-    XCTAssertEqual(paths.pinentryExecutable, pinentry.path)
-    XCTAssertEqual(paths.pamExecutable, pam.path)
+    XCTAssertEqual(
+      paths.pinentryExecutable,
+      fixtureURL.appendingPathComponent("opt/pinentry-companion/bin/pinentry-companion").path
+    )
+    XCTAssertEqual(
+      paths.pamExecutable,
+      fixtureURL.appendingPathComponent("opt/pam-companion/bin/pam-companion").path
+    )
     XCTAssertEqual(paths.sudoExecutable, "/usr/bin/sudo")
   }
 
