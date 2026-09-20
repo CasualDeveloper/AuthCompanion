@@ -71,10 +71,12 @@ Each component owns its own state:
   record;
 - AuthCompanion stores no third lifecycle database.
 
-If PAM fails after pinentry setup, AuthCompanion asks PAM to recover and then
-restores pinentry. If PAM was already committed when its health check fails,
-AuthCompanion restores PAM first and then pinentry. It reports
-`manualRequired` if either component cannot prove its rollback.
+If setup stops after pinentry-companion commits, AuthCompanion preserves the
+observed component state and reports `manualRequired`. It does not use ordinary
+component restore as an automatic undo: restore targets each component's
+recorded enrollment baseline, which may predate the current suite invocation.
+Run status and doctor before deciding whether to retry setup or explicitly
+restore the enrolled configuration.
 
 ## Commands and JSON output
 
@@ -88,8 +90,9 @@ authcompanion --version
 authcompanion --help
 ```
 
-JSON responses use schema version 1 and contain exactly one document on
-standard output. Exit status `0` means success or a non-blocking warning, `1`
+Accepted JSON operations use schema version 1 and contain exactly one document
+on standard output. Some malformed invocations currently return only an error
+on standard error. Exit status `0` means success or a non-blocking warning, `1`
 means an operational error or conflict, and `2` means the invocation is
 invalid.
 
@@ -97,6 +100,18 @@ AuthCompanion resolves only the fixed Homebrew `opt` locations for the two
 formulas, verifies that they resolve inside their respective Cellars, and
 requires the supported component versions. It never searches `PATH`, accepts
 an executable override, or builds a shell command.
+
+## Using the system from an agent
+
+Start with the [current agent guide](docs/agent-guide.md). It explains which
+commands are passive, what their evidence proves, and when a person needs to
+authorize or authenticate. Configuration, lifecycle ownership, and successful
+Touch ID/Watch authentication are different facts.
+
+The [system design](docs/design.md), [proposed machine contract](docs/agent-contract.md),
+and [sequential implementation plan](docs/plans/2026-09-16-agent-operability.md)
+describe the next interfaces. Proposed commands and stronger recovery guarantees
+in those documents are not features of the current release.
 
 ## Requirements and build
 
@@ -139,7 +154,7 @@ See [RELEASING.md](RELEASING.md) for the release and single live setup gate.
 
 AuthCompanion was developed with Codex and GPT-5.6 as engineering tools. Codex
 helped inspect the existing component code, implement and test the Swift 6 PAM
-module and orchestration CLI, and exercise the packaging, release, recovery,
+lifecycle manager and orchestration CLI, and exercise the packaging, release, recovery,
 and rollback paths. GPT-5.6 was used to reason through the security model and
 failure cases, especially partial PAM commits, configuration drift, and how to
 prove that a rollback completed.

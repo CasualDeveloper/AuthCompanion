@@ -63,6 +63,20 @@ rollback error, or manual recovery result.
 
 ## Publish and update Homebrew
 
+For changes to the agent interfaces, follow the
+[contract and distribution plan](docs/plans/2026-09-16-agent-operability.md).
+Include the implemented schemas and compatibility declaration in the candidate,
+and test producer fixtures and actual resolved component versions. A standalone
+component release, a schema version, and a passing `--version` check do not by
+themselves establish suite compatibility. Preserve existing JSON contracts for
+the documented migration period. Planned contract features are not release
+claims until implemented and verified.
+
+Keep candidates as drafts until the tap can validate a compatible promotion.
+Use the plan's coordinator-first compatibility release when components would
+otherwise outgrow the published coordinator's exact version pins. A single tap
+commit does not make installed package upgrades atomic.
+
 After the live gate succeeds, publish the existing draft without rebuilding:
 
 ```sh
