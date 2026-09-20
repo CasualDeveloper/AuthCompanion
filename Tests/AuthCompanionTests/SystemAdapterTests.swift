@@ -36,6 +36,42 @@ final class SystemToolRunnerTests: XCTestCase {
     XCTAssertEqual(result.exitStatus, 1)
   }
 
+  func testCapturesStandardErrorPrivately() throws {
+    let result = try SystemToolRunner().run(
+      ToolInvocation(executable: "/bin/ls", arguments: ["/path-that-does-not-exist"])
+    )
+
+    XCTAssertNotEqual(result.exitStatus, 0)
+    XCTAssertTrue(result.stdout.isEmpty)
+    XCTAssertFalse(result.stderr.isEmpty)
+  }
+
+  func testTerminatesACommandThatExceedsTheDeadline() {
+    let start = Date()
+
+    XCTAssertThrowsError(
+      try SystemToolRunner(timeout: 0.05, terminationGrace: 0.05).run(
+        ToolInvocation(executable: "/bin/sleep", arguments: ["2"])
+      )
+    ) { error in
+      XCTAssertEqual(error as? SystemToolError, .timedOut)
+    }
+    XCTAssertLessThan(Date().timeIntervalSince(start), 1)
+  }
+
+  func testTerminatesACommandWhileItIsFloodingOutput() {
+    let start = Date()
+
+    XCTAssertThrowsError(
+      try SystemToolRunner(maximumOutputBytes: 1_024, timeout: 2).run(
+        ToolInvocation(executable: "/usr/bin/yes", arguments: [])
+      )
+    ) { error in
+      XCTAssertEqual(error as? SystemToolError, .outputTooLarge)
+    }
+    XCTAssertLessThan(Date().timeIntervalSince(start), 1)
+  }
+
   func testProvidesNoStandardInputToComponentCommands() throws {
     let result = try SystemToolRunner().run(
       ToolInvocation(executable: "/bin/cat", arguments: []))

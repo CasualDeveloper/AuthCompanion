@@ -1,49 +1,128 @@
 import Darwin
+import Dispatch
 import Foundation
 
 public enum SystemToolError: Error, Equatable, CustomStringConvertible {
   case captureCreationFailed
+  case captureReadFailed
   case outputTooLarge
+  case timedOut
 
   public var description: String {
     switch self {
     case .captureCreationFailed:
       "could not create a private command-output capture"
+    case .captureReadFailed:
+      "could not read the component command result"
     case .outputTooLarge:
       "component command output exceeded the safety limit"
+    case .timedOut:
+      "component command exceeded the execution deadline"
     }
   }
 }
 
 public final class SystemToolRunner: ToolRunning {
   private let maximumOutputBytes: UInt64
+  private let timeoutNanoseconds: UInt64
+  private let terminationGraceNanoseconds: UInt64
+  private let pollIntervalMicroseconds: useconds_t = 10_000
 
-  public init(maximumOutputBytes: Int = 1_048_576) {
+  public init(
+    maximumOutputBytes: Int = 1_048_576,
+    timeout: TimeInterval = 60,
+    terminationGrace: TimeInterval = 2
+  ) {
     self.maximumOutputBytes = UInt64(maximumOutputBytes)
+    timeoutNanoseconds = Self.nanoseconds(timeout)
+    terminationGraceNanoseconds = Self.nanoseconds(terminationGrace)
   }
 
   public func run(_ invocation: ToolInvocation) throws -> ToolResult {
-    let capture = try outputCapture()
-    defer { try? capture.close() }
+    let standardOutput = try outputCapture()
+    defer { try? standardOutput.close() }
+    let standardError = try outputCapture()
+    defer { try? standardError.close() }
 
     let process = Process()
     process.executableURL = URL(fileURLWithPath: invocation.executable)
     process.arguments = invocation.arguments
     process.standardInput = FileHandle.nullDevice
-    process.standardOutput = capture
-    process.standardError = FileHandle.standardError
+    process.standardOutput = standardOutput
+    process.standardError = standardError
     try process.run()
-    process.waitUntilExit()
+    try waitForExit(
+      process,
+      captures: [standardOutput, standardError]
+    )
 
-    let outputSize = try capture.seekToEnd()
-    guard outputSize <= maximumOutputBytes else { throw SystemToolError.outputTooLarge }
-    try capture.seek(toOffset: 0)
-    let output = try capture.readToEnd() ?? Data()
     return ToolResult(
       exitStatus: process.terminationStatus,
-      stdout: output,
-      stderr: Data()
+      stdout: try capturedData(standardOutput),
+      stderr: try capturedData(standardError)
     )
+  }
+
+  private func waitForExit(_ process: Process, captures: [FileHandle]) throws {
+    let deadline = DispatchTime.now().uptimeNanoseconds.addingReportingOverflow(
+      timeoutNanoseconds
+    ).partialValue
+    while process.isRunning {
+      do {
+        guard try capturedSize(captures) <= maximumOutputBytes else {
+          stop(process)
+          throw SystemToolError.outputTooLarge
+        }
+      } catch {
+        stop(process)
+        throw error
+      }
+      guard DispatchTime.now().uptimeNanoseconds < deadline else {
+        stop(process)
+        throw SystemToolError.timedOut
+      }
+      usleep(pollIntervalMicroseconds)
+    }
+    process.waitUntilExit()
+    guard try capturedSize(captures) <= maximumOutputBytes else {
+      throw SystemToolError.outputTooLarge
+    }
+  }
+
+  private func stop(_ process: Process) {
+    guard process.isRunning else { return }
+    process.terminate()
+    let deadline = DispatchTime.now().uptimeNanoseconds.addingReportingOverflow(
+      terminationGraceNanoseconds
+    ).partialValue
+    while process.isRunning, DispatchTime.now().uptimeNanoseconds < deadline {
+      usleep(pollIntervalMicroseconds)
+    }
+    if process.isRunning {
+      kill(process.processIdentifier, SIGKILL)
+    }
+    process.waitUntilExit()
+  }
+
+  private func capturedSize(_ captures: [FileHandle]) throws -> UInt64 {
+    try captures.reduce(0) { total, capture in
+      var metadata = stat()
+      guard fstat(capture.fileDescriptor, &metadata) == 0, metadata.st_size >= 0 else {
+        throw SystemToolError.captureReadFailed
+      }
+      let (size, overflow) = total.addingReportingOverflow(UInt64(metadata.st_size))
+      guard !overflow else { throw SystemToolError.outputTooLarge }
+      return size
+    }
+  }
+
+  private func capturedData(_ capture: FileHandle) throws -> Data {
+    do {
+      try capture.seek(toOffset: 0)
+      return try capture.readToEnd() ?? Data()
+    } catch {
+      throw SystemToolError.captureReadFailed
+    }
   }
 
   private func outputCapture() throws -> FileHandle {
@@ -67,6 +146,12 @@ public final class SystemToolRunner: ToolRunning {
       try? fileManager.removeItem(at: url)
       throw error
     }
+  }
+
+  private static func nanoseconds(_ interval: TimeInterval) -> UInt64 {
+    guard interval.isFinite, interval > 0 else { return 0 }
+    let value = interval * 1_000_000_000
+    return value >= Double(UInt64.max) ? UInt64.max : UInt64(value)
   }
 }
 
